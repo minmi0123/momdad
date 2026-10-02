@@ -1,0 +1,1605 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>엄마 이야기</title>
+<style>
+  /* 밝게: 직장인 게임 2개(바탕 #1d1a22)와 반대로, 펼친 책 종이 느낌 */
+  :root {
+    --desk: #f3e3c3;   /* 책 바깥 */
+    --paper: #fff8ea;  /* 책 종이 */
+    --edge: #e9d6b0;   /* 종이 테두리 */
+    --ink: #5a4130;    /* 글씨 (검정 X) */
+    --muted: #a08a70;
+    --pick: #ffe7a8;   /* 선택지 버튼 */
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--desk);
+    color: var(--ink);
+    font-family: "Galmuri11", "DungGeunMo", "Apple SD Gothic Neo", "Noto Sans KR", "맑은 고딕", "Malgun Gothic", system-ui, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 16px;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  #book {
+    position: relative;
+    width: 100%;
+    max-width: 720px;
+    height: fit-content;
+    background: var(--paper);
+    border: 3px solid var(--edge);
+    border-radius: 6px;
+    box-shadow: 0 6px 0 var(--edge);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    cursor: pointer;
+  }
+  #chapter { color: var(--muted); font-size: 14px; min-height: 18px; }
+  #game {
+    display: block;
+    width: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border: 3px solid var(--ink);
+    border-radius: 2px;
+  }
+  #say {
+    min-height: 92px;
+    font-size: 17px;
+    line-height: 1.7;
+    padding: 4px 6px;
+    white-space: pre-line;
+    transition: filter 1.2s, opacity 1.2s;
+  }
+  /* 배드엔딩: 글씨도 지우개로 지운 것처럼 번진다 */
+  #say.erased { filter: blur(3px); opacity: .3; }
+  #hint {
+    color: var(--muted);
+    font-size: 14px;
+    text-align: right;
+    min-height: 20px;
+    animation: blink 1.2s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity: .35; } }
+  /* 버튼이 없어도 자리를 비워 둔다 — 버튼이 나올 때 책 크기가 바뀌지 않게 */
+  #choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    align-content: center;
+    min-height: 51px;
+  }
+  #choices button {
+    font: inherit;
+    font-size: 16px;
+    color: var(--ink);
+    background: var(--pick);
+    border: 3px solid var(--ink);
+    border-radius: 4px;
+    padding: 10px 16px;
+    box-shadow: 0 3px 0 var(--ink);
+    cursor: pointer;
+  }
+  #choices button:active { transform: translateY(3px); box-shadow: none; }
+  /* 장면 넘어갈 때 책 한 장이 하얘진다 */
+  #fade {
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    border-radius: 4px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .6s;
+  }
+  #fade.on { opacity: 1; }
+  /* 좁은 화면은 긴 선택지가 두 줄로 내려가서 두 줄 자리를 비워 둔다 */
+  @media (max-width: 480px) {
+    #say { font-size: 15px; }
+    #choices { min-height: 112px; }
+  }
+</style>
+</head>
+<body>
+<main id="book">
+  <div id="chapter"></div>
+  <canvas id="game" width="160" height="90"></canvas>
+  <div id="say"></div>
+  <div id="choices"></div>
+  <div id="hint"></div>
+  <div id="fade"></div>
+</main>
+<script>
+// ─────────────────────────────────────────────
+// 1. 도트 데이터 (팔레트 + 격자)
+//    '.' = 투명. 나머지 글자는 PALETTE 의 키.
+// ─────────────────────────────────────────────
+const W = 160, H = 90;
+const FEET = 86;   // 소녀 발 높이 (길 위)
+
+const PALETTE = {
+  o: '#4a3428', // 외곽선 (검정 대신 진한 갈색)
+  h: '#5a3a2a', // 머리카락
+  s: '#f8cfab', // 피부
+  c: '#f4a3a0', // 볼
+  e: '#3a2a22', // 눈
+  m: '#c9645a', // 입 · 교복 넥타이
+  t: '#ff9e7a', // 윗옷
+  p: '#7a8fd6', // 바지 · 치마
+  b: '#7a5a44', // 신발
+};
+
+// 소녀 16x24 — 머리 큰 동글동글 비율. 시기마다 colors 로 머리·옷만 바꾼다
+const GIRL_TOP = [
+  '................',
+  '.....oooooo.....',
+  '...oohhhhhhoo...',
+  '..ohhhhhhhhhho..',
+  '.ohhhhhhhhhhhho.',
+  '.ohhhhhhhhhhhho.',
+  '.ohhhhsshhsshho.',
+  '.ohhhssssssssso.',
+  '.ohhsssesssesso.',
+  '.ohhsssesssesso.',
+  '.ohhsccssmsscco.',
+  '..ohssssssssso..',
+  '...ooossssooo...',
+  '....otttttto....',
+  '...otttttttto...',
+  '..osttttttttso..',
+  '..osttttttttso..',
+  '...oppppppppo...',
+  '....oppppppo....',
+  '....opppoppo....',
+];
+// 학창 시절 16x26 — 같은 얼굴, 몸만 두 줄 길게 + 교복 넥타이(m)
+const TEEN_TOP = [
+  ...GIRL_TOP.slice(0, 13),
+  '....ottmmtto....',
+  '...otttmmttto...',
+  '...otttttttto...',
+  '..osttttttttso..',
+  '..osttttttttso..',
+  '..osttttttttso..',
+  '...oppppppppo...',
+  '...oppppppppo...',
+  '....oppppppo....',
+];
+const LEGS_STAND = ['....oso..oso....', '....obo..obo....', '....obbo.obbo...', '................'];
+const LEGS_A     = ['...oso....oso...', '...obo....obo...', '..obbo....obbo..', '................'];
+const LEGS_B     = ['.....osooso.....', '.....oboobo.....', '.....obbobbo....', '................'];
+
+const NOTE = [
+  '..o..',
+  '..oo.',
+  '..o.o',
+  '..o..',
+  'ooo..',
+  'ooo..',
+];
+// 걸으면서 외우는 글자
+const LETTER = [
+  '.ooo.',
+  'o...o',
+  'ooooo',
+  'o...o',
+  'o...o',
+];
+
+// 옷 색 — 같은 도트에 색만 바꾼다
+const LOOKS = {
+  sunny:   { h: '#d9873e', t: '#ffd35a', p: '#ffb347' },   // 써니 (엄마 본명에서 딴 이름), 해님 색
+  friendA: { h: '#3a2a22', t: '#8fd0ff', p: '#f7b6c8' },
+  friendB: { h: '#6b4a3a', t: '#c6e88a', p: '#7a8fd6' },
+  uniform: { t: '#fbfbf5', p: '#46598f' },                  // 교복: 흰 블라우스 + 남색 치마
+  gym:     { t: '#fbfbf5', p: '#4a6fd6', m: '#4a6fd6' },    // 체육복
+  rivalA:  { h: '#2e2018', t: '#ffe08a', p: '#4a6fd6', m: '#ffe08a' },
+  rivalB:  { h: '#7a4a2a', t: '#bfe3ff', p: '#4a6fd6', m: '#bfe3ff' },
+  teenHome:{ t: '#ffb7a0', m: '#ffb7a0', p: '#7a8fd6' },
+  father:  { h: '#5e5650', t: '#f1ece0', p: '#e6dfcf', m: '#f1ece0', b: '#5e5650' },  // 훈장님: 흰 한복
+  fatherDrunk: { h: '#5e5650', t: '#f1ece0', p: '#e6dfcf', m: '#f1ece0', b: '#5e5650', c: '#ff6b6b', s: '#f9c0a0' },
+};
+
+// ─────────────────────────────────────────────
+// 2. 도트 → 오프스크린 캔버스 (한 번만 그려 둔다)
+// ─────────────────────────────────────────────
+function makeSprite(rows, colors = {}, flip = false) {
+  const pal = { ...PALETTE, ...colors };
+  const w = rows[0].length;
+  rows.forEach((r, i) => { if (r.length !== w) console.warn('도트 줄 길이 다름', i, r); });
+  const cv = document.createElement('canvas');
+  cv.width = w;
+  cv.height = rows.length;
+  const c = cv.getContext('2d');
+  rows.forEach((row, y) => [...row].forEach((ch, x) => {
+    if (ch === '.' || !pal[ch]) return;
+    c.fillStyle = pal[ch];
+    c.fillRect(flip ? w - 1 - x : x, y, 1, 1);
+  }));
+  return cv;
+}
+
+// 서기 1장 + 걷기 2장, 좌우
+const LEGS_16 = { stand: LEGS_STAND, a: LEGS_A, b: LEGS_B };
+
+function makeWalker(top, colors = {}, legs = LEGS_16) {
+  const frames = (flip) => ({
+    stand: makeSprite([...top, ...legs.stand], colors, flip),
+    walk: [makeSprite([...top, ...legs.a], colors, flip), makeSprite([...top, ...legs.b], colors, flip)],
+  });
+  return { right: frames(false), left: frames(true) };
+}
+
+// 어른 16x26 — 학창 시절과 같은 키, 머리가 어깨까지 내려온다
+const ADULT_TOP = [
+  ...GIRL_TOP.slice(0, 11),
+  '.ohhsssssssshho.',
+  '.ohhoossssoohho.',
+  '.ohhottttttohho.',
+  '..ohottttttoho..',
+  '...otttttttto...',
+  '..osttttttttso..',
+  '..osttttttttso..',
+  '..osttttttttso..',
+  '...oppppppppo...',
+  '...oppppppppo...',
+  '....oppppppo....',
+];
+
+// 아이 10x14 — 첫째(아들) · 둘째(딸)
+const KID_TOP = [
+  '...oooo...',
+  '.oohhhhoo.',
+  'ohhhhhhhho',
+  'ohhsshssho',
+  'osesssseso',
+  'oscsssscso',
+  '.ossmmsso.',
+  '..oooooo..',
+  '..otttto..',
+  '.osttttso.',
+  '..otttto..',
+  '..oppppo..',
+];
+const KID_LEGS = {
+  stand: ['..obo.obo.', '..........'],
+  a: ['.obo..obo.', '..........'],
+  b: ['...obobo..', '..........'],
+};
+
+const HEART = [
+  'oo.oo',
+  'ooooo',
+  'ooooo',
+  '.ooo.',
+  '..o..',
+];
+
+Object.assign(LOOKS, {
+  worker:    { t: '#a9c4dc', p: '#6f84a8' },                         // 공장 작업복
+  adult:     { t: '#ffb7a0', p: '#c98aa8' },
+  adultDawn: { t: '#e9a35a', p: '#5a6a8a' },                         // 새벽 배달 잠바
+  boy:       { h: '#2e2018', t: '#fbfbf5', p: '#5a6a8a', m: '#fbfbf5' },   // 아빠 (흰 셔츠)
+  boyWorker: { h: '#2e2018', t: '#a9c4dc', p: '#6f84a8', m: '#a9c4dc' },
+  suitorA:   { h: '#5a4a3a', t: '#a9c4dc', p: '#6f84a8', m: '#a9c4dc' },
+  suitorB:   { h: '#2e2018', t: '#c6b5e0', p: '#6f84a8', m: '#c6b5e0' },
+  son:       { t: '#7cc56b', p: '#5a6a8a' },
+  daughter:  { t: '#f7b6c8', p: '#f27a9b' },
+});
+
+const SPRITES = {
+  girl: makeWalker(GIRL_TOP),
+  sunny: makeWalker(GIRL_TOP, LOOKS.sunny),
+  friendA: makeWalker(GIRL_TOP, LOOKS.friendA),
+  friendB: makeWalker(GIRL_TOP, LOOKS.friendB),
+  teen: makeWalker(TEEN_TOP, LOOKS.uniform),
+  teenGym: makeWalker(TEEN_TOP, LOOKS.gym),
+  teenHome: makeWalker(TEEN_TOP, LOOKS.teenHome),
+  rivalA: makeWalker(TEEN_TOP, LOOKS.rivalA),
+  rivalB: makeWalker(TEEN_TOP, LOOKS.rivalB),
+  father: makeWalker(TEEN_TOP, LOOKS.father),
+  fatherDrunk: makeWalker(TEEN_TOP, LOOKS.fatherDrunk),
+  worker: makeWalker(ADULT_TOP, LOOKS.worker),
+  adult: makeWalker(ADULT_TOP, LOOKS.adult),
+  adultDawn: makeWalker(ADULT_TOP, LOOKS.adultDawn),
+  boy: makeWalker(TEEN_TOP, LOOKS.boy),
+  boyWorker: makeWalker(TEEN_TOP, LOOKS.boyWorker),
+  suitorA: makeWalker(TEEN_TOP, LOOKS.suitorA),
+  suitorB: makeWalker(TEEN_TOP, LOOKS.suitorB),
+  son: makeWalker(KID_TOP, LOOKS.son, KID_LEGS),
+  daughter: makeWalker(KID_TOP, LOOKS.daughter, KID_LEGS),
+  note: makeSprite(NOTE, { o: '#f27a9b' }),
+  letter: makeSprite(LETTER, { o: '#5a8fd6' }),
+  heart: makeSprite(HEART, { o: '#ff7a9b' }),
+};
+
+// ─────────────────────────────────────────────
+// 3. 배경 — 시기별 하늘 (문서 game/01-엄마-이야기.md 의 '그림 방향')
+// ─────────────────────────────────────────────
+const ERA = {
+  spring: {   // 어린 시절: 봄 아침, 연두 논밭
+    sky: ['#c4ebff', '#d8f3ff', '#ecfaff'],
+    sun: ['#fff1a8', '#ffe066'], sunX: 30,
+    hill: ['#b8e09a', '#9ad27c'],
+    soil: '#d9b27a', furrow: '#c49a63', sprout: '#7cc56b', path: '#ecd6a4',
+  },
+  summer: {   // 학창 시절: 여름 낮, 파란 하늘
+    sky: ['#7fcbff', '#9cd8ff', '#bfe7ff'],
+    sun: ['#fff3b0', '#ffd84a'], sunX: 132,
+    hill: ['#8fd06a', '#6fbf55'],
+    soil: '#e3c48e', furrow: '#cfa970', sprout: '#5fb04a', path: '#ecd6a4',
+  },
+  sunset: {   // 어른: 노을 저녁, 주황 · 분홍
+    sky: ['#ffa98a', '#ffc29e', '#ffdcb8'], cloud: '#ffeadf',
+    sun: ['#fff0c0', '#ffcf70'], sunX: 34, sunY: 46,
+    hill: ['#d9a7bf', '#c693ae'], path: '#ecd9c8', furrow: '#d8c0ae',
+  },
+  dusk: {     // 기숙사 앞: 해 진 직후 보라 → 분홍
+    sky: ['#8f86c4', '#b896c6', '#f0b4ae'], cloud: '#e6d2e6',
+    hill: ['#a98fb8', '#9580a8'], path: '#e3d3cf', furrow: '#cdb9b8',
+  },
+  dawn: {     // 새벽 배달: 남색이지만 가로등 · 창문 불빛은 노랗게
+    sky: ['#34406e', '#4a578c', '#7a80b4'], cloud: '#5f6a9c',
+    hill: ['#4e5a86', '#434e78'], path: '#9aa0bf', furrow: '#858bab',
+  },
+  morning: {  // 배달 끝나고 돌아올 때: 해 뜨는 아침
+    sky: ['#9cc4ee', '#f7c6a8', '#ffe3b0'],
+    sun: ['#fff0c0', '#ffd36a'], sunX: 140, sunY: 50,
+    hill: ['#9fbf9a', '#8cae88'], path: '#ecd9c8', furrow: '#d8c0ae',
+  },
+  rain: {     // 아버지 돌아가신 날: 비 오는 저녁. 슬프지만 까맣지 않게 (연보라 회색)
+    sky: ['#a3abcf', '#b6bbd8', '#cbcbe0'],
+    hill: ['#a9bba3', '#93a98e'],
+    soil: '#c4b597', furrow: '#ad9f84', path: '#d3c6aa',
+  },
+};
+
+const PAPER = '#fff8ea';
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+function rect(x, y, w, h, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.round(x), Math.round(y), w, h);
+}
+
+function disc(cx, cy, r, color) {
+  ctx.fillStyle = color;
+  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r) ctx.fillRect(cx + dx, cy + dy, 1, 1);
+}
+
+// 띠 경계를 체크무늬로 섞어 도트답게
+function skyBands(colors, bottom) {
+  const step = bottom / colors.length;
+  colors.forEach((col, i) => rect(0, i * step, W, step + 1, col));
+  for (let i = 1; i < colors.length; i++) {
+    const y = Math.round(i * step);
+    ctx.fillStyle = colors[i - 1];
+    for (let x = 0; x < W; x += 2) ctx.fillRect(x + (y % 2), y, 1, 1);
+  }
+}
+
+function drawSun(era, t) {
+  const y = era.sunY || 14;
+  disc(era.sunX, y, 7 + (Math.floor(t / 40) % 2), era.sun[0]);
+  disc(era.sunX, y, 5, era.sun[1]);
+}
+
+function drawCloud(x, y, color = '#ffffff') {
+  x = ((x % (W + 40)) + W + 40) % (W + 40) - 30;
+  rect(x + 4, y, 12, 3, color);
+  rect(x, y + 3, 22, 4, color);
+}
+
+function drawHills(era) {
+  for (let x = 0; x < W; x++) {
+    const a = Math.round(46 + 4 * Math.sin(x / 14) + 2 * Math.sin(x / 5));
+    rect(x, a, 1, 60 - a, era.hill[0]);
+    const b = Math.round(53 + 3 * Math.sin(x / 9 + 1));
+    rect(x, b, 1, 60 - b, era.hill[1]);
+  }
+}
+
+function drawSky(era, t) {
+  skyBands(era.sky, 60);
+  if (era.sun) drawSun(era, t);
+  drawCloud(t / 12 + 20, 10, era.cloud);
+  drawCloud(t / 18 + 110, 20, era.cloud);
+  drawHills(era);
+}
+
+function drawField(era, t) {
+  rect(0, 58, W, H - 58, era.soil);
+  for (let y = 60; y < 74; y += 4) {
+    rect(0, y, W, 1, era.furrow);
+    for (let x = (y % 8); x < W; x += 6) {
+      const sway = Math.floor(t / 30 + x) % 2;
+      rect(x, y - 1, 1, 1, era.sprout);
+      rect(x + sway, y - 2, 1, 1, era.sprout);
+    }
+  }
+  drawPath(era);
+}
+
+function drawPath(era) {
+  rect(0, 76, W, H - 76, era.path);              // 맨 아래까지 칠해야 지난 프레임이 안 남는다
+  rect(0, 76, W, 1, era.furrow);
+}
+
+// 초가집. mode: tv = 캔디캔디 나오는 창문 / lit = 따뜻한 불빛 / rain = 비 오는 날 (색이 가라앉음)
+const HOUSE = { x: 100, window: { x: 110, y: 46 }, door: 134 };
+function drawHouse(t, mode = 'tv') {
+  const x = HOUSE.x;
+  const wall = mode === 'rain' ? '#e6d7b9' : '#f5e2bc';
+  const roof = mode === 'rain' ? '#cfb575' : '#e3bf6a';
+  rect(x + 2, 42, 46, 24, PALETTE.o);
+  rect(x + 3, 43, 44, 23, wall);
+  for (let i = 0; i < 14; i++) {                 // 지붕 (초가)
+    rect(x - 4 + i, 28 + 14 - i, 58 - i * 2, 1, i === 13 ? PALETTE.o : roof);
+  }
+  rect(x - 4, 41, 58, 2, PALETTE.o);
+  for (let i = 0; i < 6; i++) rect(x + 2 + i * 9, 32 + (i % 2) * 3, 1, 6, '#c9a050');
+  const w = HOUSE.window;
+  rect(w.x - 1, w.y - 1, 18, 12, PALETTE.o);
+  if (mode === 'tv') {                           // TV 불빛 + 여동생 · 어린 조카 뒤통수
+    rect(w.x, w.y, 16, 10, Math.floor(t / 25) % 2 ? '#a8dcff' : '#c6e8ff');
+    rect(w.x + 3, w.y + 6, 4, 4, PALETTE.h);
+    rect(w.x + 9, w.y + 7, 3, 3, '#6b4a3a');
+  } else {
+    rect(w.x, w.y, 16, 10, '#ffe6a0');
+  }
+  rect(w.x + 7, w.y, 1, 10, PALETTE.o);
+  rect(HOUSE.door - 1, 49, 10, 17, PALETTE.o);   // 문
+  rect(HOUSE.door, 50, 8, 16, '#a8714a');
+  rect(HOUSE.door + 6, 58, 1, 1, '#ffe066');
+}
+
+// 볏단 — 지게 장면에서 소녀가 숨는 곳. 소녀보다 앞에 그린다 (머리만 빼꼼)
+const HAY = { x: 96, w: 24, top: 68 };
+function drawHay(x = HAY.x, top = HAY.top, w = HAY.w) {
+  const half = w / 2, cx = x + half, h = FEET + 1 - top;
+  const dome = Math.min(half, h * 0.6);           // 위쪽은 둥글게, 아래는 곧게
+  for (let y = top; y <= FEET; y++) {
+    const d = y - top;
+    const k = d < dome ? Math.max(2, Math.round(half * Math.sqrt(1 - ((dome - d) / dome) ** 2))) : half;
+    rect(cx - k - 1, y, k * 2 + 2, 1, PALETTE.o);
+    rect(cx - k, y, k * 2, 1, (y - top) % 4 === 2 ? '#c9a040' : '#e8c25a');
+  }
+  rect(cx - half, top + Math.round(h * 0.55), w, 2, '#a8803a');   // 묶은 끈
+}
+
+// 장독대
+function drawJars(x) {
+  [[0, 10], [11, 8], [20, 9]].forEach(([dx, r]) => {
+    const cx = x + dx + r / 2;
+    rect(cx - r / 2 - 1, 60 - r, r + 2, r + 2, PALETTE.o);
+    rect(cx - r / 2, 61 - r, r, r, '#8a5a3c');
+    rect(cx - r / 2 + 1, 62 - r, 2, r - 3, '#a8714a');
+    rect(cx - r / 2, 59 - r, r, 2, PALETTE.o);
+  });
+}
+
+// 학교 + 운동회 만국기
+function drawSchool() {
+  rect(9, 25, 92, 34, PALETTE.o);
+  rect(10, 26, 90, 33, '#fbf6ea');
+  rect(10, 26, 90, 4, '#d97a5a');
+  for (let r = 0; r < 2; r++) for (let i = 0; i < 9; i++) {
+    if (r === 1 && i === 4) continue;
+    rect(14 + i * 10, 34 + r * 11, 6, 6, '#9cd3f5');
+    rect(14 + i * 10, 34 + r * 11, 6, 1, PALETTE.o);
+  }
+  rect(51, 45, 8, 14, '#a8714a');                // 현관
+  disc(55, 21, 4, PALETTE.o);                    // 시계
+  disc(55, 21, 3, '#ffffff');
+  rect(55, 19, 1, 2, PALETTE.o);
+  rect(55, 21, 2, 1, PALETTE.o);
+}
+
+function drawBunting(t) {
+  const colors = ['#ff7a7a', '#ffd35a', '#7cc56b', '#5a8fd6', '#f27a9b'];
+  for (let x = 0; x < W; x++) {
+    const y = Math.round(6 + 6 * Math.sin((x / W) * Math.PI));
+    rect(x, y, 1, 1, '#8a6a50');
+    if (x % 8 === 2) {
+      const sway = Math.floor(t / 20 + x) % 2;
+      const col = colors[(x / 8 | 0) % colors.length];
+      rect(x - 1, y + 1, 5, 1, col);
+      rect(x, y + 2, 3, 1, col);
+      rect(x + 1 - sway, y + 3, 1, 1, col);
+    }
+  }
+}
+
+function drawTrack() {
+  rect(0, 58, W, H - 58, '#e7b98d');
+  [66, 74, 82].forEach((y) => rect(0, y, W, 1, '#fff4e4'));
+  rect(RACE.start, 60, 1, 30, '#ffffff');
+  for (let y = 60; y < 90; y += 2) rect(RACE.finish + (y % 4 ? 1 : 0), y, 1, 1, PALETTE.o);   // 결승선 (체크)
+  rect(RACE.finish - 1, 48, 1, 12, PALETTE.o);   // 깃대
+  rect(RACE.finish, 48, 6, 4, '#ff7a7a');
+}
+
+// 논 (물이 비친 초록) + 전봇대 + 버스 정류장
+function drawPaddies(t) {
+  rect(0, 58, W, 18, '#9ed27a');
+  for (let y = 60; y < 76; y += 3) rect(0, y, W, 1, '#86c463');
+  for (let i = 0; i < 14; i++) {
+    const x = (i * 23 + Math.floor(t / 50)) % W;
+    rect(x, 61 + (i * 7) % 13, 3, 1, '#d6f0ff');
+  }
+}
+
+function drawPoles() {
+  const poles = [24, 84, 144];
+  for (let i = 0; i < poles.length - 1; i++) {
+    for (let x = poles[i]; x <= poles[i + 1]; x++) {
+      const k = (x - poles[i]) / (poles[i + 1] - poles[i]);
+      rect(x, 34 + Math.round(5 * Math.sin(k * Math.PI)), 1, 1, '#6b5a4a');
+    }
+  }
+  poles.forEach((x) => {
+    rect(x, 32, 2, 44, '#8a6a50');
+    rect(x - 3, 34, 8, 1, '#6b5a4a');
+  });
+}
+
+const BUS_STOP = 112;
+function drawBusStop() {
+  rect(BUS_STOP, 56, 1, 21, '#8a93a6');
+  disc(BUS_STOP, 54, 4, PALETTE.o);
+  disc(BUS_STOP, 54, 3, '#5a8fd6');
+  rect(BUS_STOP - 1, 53, 3, 2, '#ffffff');
+}
+
+// 시골 버스 (민트색). x = 왼쪽 끝
+function drawBus(x) {
+  x = Math.round(x);
+  rect(x, 64, 52, 22, PALETTE.o);
+  rect(x + 1, 65, 50, 18, '#7cc5a0');
+  rect(x + 1, 65, 50, 3, '#fbfbf5');
+  for (let i = 0; i < 5; i++) rect(x + 4 + i * 9, 69, 7, 6, '#cdeeff');
+  rect(x + 1, 78, 50, 2, '#5aa883');
+  disc(x + 11, 86, 3, PALETTE.o);
+  disc(x + 41, 86, 3, PALETTE.o);
+  disc(x + 11, 86, 1, '#8a93a6');
+  disc(x + 41, 86, 1, '#8a93a6');
+}
+
+function drawPuddles(t) {
+  [[20, 82, 14], [70, 86, 18], [128, 80, 12]].forEach(([x, y, w], i) => {
+    rect(x, y, w, 2, '#aab6d6');
+    const r = (Math.floor(t / 12) + i * 3) % 6;
+    rect(x + w / 2 - r, y, r * 2, 1, '#cbd3ec');
+  });
+}
+
+function drawRain(t) {
+  for (let i = 0; i < 46; i++) {
+    const y = (i * 53 + t * 2.2) % 100 - 10;
+    const x = (i * 37 + y * 0.3) % 166 - 3;
+    rect(x, y, 1, 3, '#e6ecff');
+  }
+}
+
+function drawStars(t) {
+  for (let i = 0; i < 18; i++) {
+    if ((Math.floor(t / 25) + i) % 5) rect((i * 47 + 13) % W, (i * 29 + 5) % 30, 1, 1, '#fff6d8');
+  }
+}
+
+function drawGround(color) {
+  rect(0, 58, W, 18, color);
+}
+
+// 공장 — 톱니 지붕 + 굴뚝 연기. 결혼 장면에서도 다시 쓴다
+const FACTORY = { x: 78 };
+function drawFactory(t) {
+  const x = FACTORY.x;
+  for (let i = 0; i < 4; i++) {                  // 굴뚝 연기
+    const age = (t / 2 + i * 40) % 160;
+    disc(Math.round(x + 63 - age * 0.3), Math.round(5 - age * 0.02), 2 + Math.floor(age / 45), '#f8efe9');
+  }
+  rect(x + 60, 8, 7, 27, PALETTE.o);
+  rect(x + 61, 9, 5, 26, '#d98a7a');
+  rect(x + 61, 14, 5, 2, '#fbfbf5');
+  rect(x + 61, 22, 5, 2, '#fbfbf5');
+  rect(x - 1, 33, 74, 33, PALETTE.o);
+  rect(x, 34, 72, 31, '#efe3d6');
+  for (let i = 0; i < 4; i++) {                  // 톱니 지붕
+    for (let k = 0; k < 18; k++) {
+      const h = Math.round(k * 0.55);
+      rect(x + i * 18 + k, 33 - h, 1, h, '#cf9f98');
+      rect(x + i * 18 + k, 32 - h, 1, 1, PALETTE.o);
+    }
+    rect(x + i * 18 + 17, 23, 1, 10, PALETTE.o);
+  }
+  for (let i = 0; i < 6; i++) {
+    const wx = x + 4 + i * 11;
+    rect(wx - 1, 38, 9, 7, PALETTE.o);
+    rect(wx, 39, 7, 5, '#ffe6a0');
+  }
+  rect(x + 27, 49, 18, 16, PALETTE.o);           // 정문
+  rect(x + 28, 50, 16, 15, '#9aa3b5');
+  for (let i = 0; i < 5; i++) rect(x + 30 + i * 3, 50, 1, 15, '#7d8699');
+}
+
+// 회사 기숙사 — 소년이 문 앞에서 기다린다
+function drawDorm() {
+  const x = 92;
+  rect(x - 3, 21, 68, 3, '#b48aac');
+  rect(x - 1, 24, 64, 42, PALETTE.o);
+  rect(x, 25, 62, 41, '#f3e6da');
+  for (let f = 0; f < 3; f++) for (let i = 0; i < 5; i++) {
+    if (f === 2 && i === 2) continue;            // 문 자리
+    const wx = x + 4 + i * 12, wy = 28 + f * 12;
+    rect(wx - 1, wy - 1, 8, 8, PALETTE.o);
+    rect(wx, wy, 6, 6, (i * 7 + f * 3) % 5 === 0 ? '#c7b8d8' : '#ffe08a');
+  }
+  rect(x + 24, 51, 14, 15, PALETTE.o);
+  rect(x + 25, 52, 12, 14, '#a8714a');
+  rect(x + 30, 48, 2, 2, '#ffe08a');
+}
+
+// 미용실 — 줄무늬 차양 + 돌아가는 간판
+function drawSalon(t) {
+  const x = 56;
+  rect(x - 1, 27, 92, 39, PALETTE.o);
+  rect(x, 28, 90, 37, '#fbeee6');
+  rect(x + 20, 30, 50, 6, '#ffffff');            // 간판
+  rect(x + 26, 32, 38, 2, '#f27a9b');
+  for (let i = 0; i < 90; i += 6) {
+    rect(x + i, 38, 3, 6, '#f27a9b');
+    rect(x + i + 3, 38, 3, 6, '#ffffff');
+  }
+  rect(x + 7, 47, 50, 18, PALETTE.o);            // 창 (거울 · 의자)
+  rect(x + 8, 48, 48, 16, '#cdeeff');
+  rect(x + 14, 50, 10, 8, '#eaf7ff');
+  rect(x + 34, 50, 10, 8, '#eaf7ff');
+  rect(x + 16, 58, 6, 6, '#8a5a6a');
+  rect(x + 36, 58, 6, 6, '#8a5a6a');
+  rect(x + 64, 46, 16, 19, PALETTE.o);           // 문
+  rect(x + 65, 47, 14, 18, '#c98aa8');
+  rect(x + 76, 56, 1, 1, '#ffe066');
+  const px = x + 85;
+  rect(px - 1, 45, 5, 20, PALETTE.o);
+  for (let y = 46; y < 64; y++) rect(px, y, 3, 1, ['#ff7a7a', '#ffffff', '#5a8fd6'][Math.floor((y + t / 6) / 3) % 3]);
+}
+
+// 복도식 아파트. mode: eve = 육아하던 저녁 / dawn = 새벽 배달 (복도 끝이 어둡다) / morning = 돌아올 때
+function drawApt(mode) {
+  const C = {
+    eve:     { wall: '#f2e2d4', door: '#a8714a', off: '#c9b0a8', end: '#b49a96', rail: '#e0cfc0' },
+    dawn:    { wall: '#8d92b8', door: '#5e5878', off: '#4a5578', end: '#2f3558', rail: '#7a7fa6' },
+    morning: { wall: '#f6e8da', door: '#a8714a', off: '#d9c6bb', end: '#c9b0a8', rail: '#e0cfc0' },
+  }[mode];
+  const x = 24, w = 104;
+  rect(x - 1, 11, w + 2, 56, PALETTE.o);
+  rect(x, 12, w, 54, C.wall);
+  for (let f = 0; f < 4; f++) {
+    const y0 = 13 + f * 13;
+    for (let d = 0; d < 7; d++) {
+      const dx = x + 10 + d * 13;
+      rect(dx, y0 + 2, 5, 8, C.door);
+      const lit = mode === 'dawn' ? (d * 3 + f) % 7 === 2 : (d + f) % 3 !== 0;
+      rect(dx + 7, y0 + 3, 4, 3, lit ? '#ffe08a' : C.off);
+    }
+    rect(x + w - 6, y0 + 1, 6, 9, C.end);         // 복도 끝
+    rect(x, y0 + 10, w, 1, PALETTE.o);            // 복도 난간
+    rect(x, y0 + 11, w, 2, C.rail);
+  }
+  rect(x, 12, 7, 54, C.rail);                     // 계단실
+  rect(x + 1, 58, 5, 8, C.door);
+}
+
+function drawLamp(on) {
+  const x = 144;
+  if (on) {                                      // 불빛 번짐: 반투명은 남색과 섞여 회색이 돼서, 노란 점을 체크무늬로 찍는다
+    ctx.fillStyle = '#ffe08a';
+    for (let dy = -12; dy <= 12; dy++) for (let dx = -12; dx <= 12; dx++) {
+      const d = dx * dx + dy * dy;
+      const on2 = d <= 36 ? (dx + dy) % 2 === 0 : d <= 144 && dx % 2 === 0 && dy % 2 === 0;
+      if (on2) ctx.fillRect(x + 1 + dx, 47 + dy, 1, 1);
+    }
+    for (let gx = x - 14; gx < x + 16; gx += 2) for (let gy = 77; gy < 89; gy += 2) {   // 바닥에 비친 불빛 (타원)
+      if (((gx - x) / 14) ** 2 + ((gy - 83) / 6) ** 2 <= 1) ctx.fillRect(gx + (gy % 4 ? 1 : 0), gy, 1, 1);
+    }
+  }
+  rect(x, 46, 2, 41, '#6b6f8a');
+  rect(x - 2, 44, 6, 3, '#6b6f8a');
+  rect(x - 1, 47, 4, 2, on ? '#fff3b0' : '#c9cbe0');
+}
+
+// 음주가무 배드엔딩 — 화면에 알록달록 조명
+function drawParty(t) {
+  const cols = ['#ff7a9b', '#ffd35a', '#7fd6ff', '#b48aff'];
+  ctx.globalAlpha = 0.3;
+  for (let i = 0; i < 6; i++) disc(Math.round(80 + 70 * Math.sin(t / 40 + i)), Math.round(40 + 25 * Math.cos(t / 33 + i * 2)), 9, cols[i % 4]);
+  ctx.globalAlpha = 1;
+}
+
+// 책 — 인트로에서 써니가 주운 책. 줄 군데군데가 비어 있다 (지워진 곳)
+function drawBook(x, y) {
+  rect(x, y, 40, 22, PALETTE.o);
+  rect(x + 1, y + 1, 38, 20, '#c9645a');
+  rect(x + 3, y + 2, 16, 18, '#fffaf0');
+  rect(x + 21, y + 2, 16, 18, '#fffaf0');
+  rect(x + 19, y + 2, 2, 18, '#e9d6b0');
+  const lines = [[12, 1], [9, 0], [13, 1], [6, 0], [12, 1], [10, 1]];
+  lines.forEach(([len, erased], i) => {
+    rect(x + 5, y + 4 + i * 2.5, len, 1, erased ? '#e8dccb' : '#b8a48c');
+    rect(x + 23, y + 4 + i * 2.5, 14 - len % 5, 1, i % 3 === 1 ? '#e8dccb' : '#b8a48c');
+  });
+}
+
+function drawSparkle(x, y, t) {
+  const b = Math.floor(t / 15) % 2;
+  rect(x, y - 2 - b, 1, 5 + b * 2, '#ffb000');
+  rect(x - 2 - b, y, 5 + b * 2, 1, '#ffb000');
+  rect(x, y, 1, 1, '#ffffff');
+}
+
+// 장면별 배경 (뒤) · 앞 소품 (소녀보다 앞)
+const BG = {
+  intro() {
+    rect(0, 0, W, H, PAPER);
+    rect(0, 70, W, 20, '#d8efc0');
+    rect(0, 70, W, 1, '#b8e09a');
+    for (let x = 3; x < W; x += 7) rect(x, 68 + (x % 3), 1, 2, '#9ad27c');
+    drawBook(52, 52);
+  },
+  candy(t) {
+    drawSky(ERA.spring, t);
+    drawField(ERA.spring, t);
+    drawHouse(t, 'tv');
+  },
+  jige(t) {
+    drawSky(ERA.spring, t);
+    drawField(ERA.spring, t);
+    drawHay(140, 62, 16);
+    drawHay(26, 64, 14);
+  },
+  race(t) {
+    drawSky(ERA.summer, t);
+    drawSchool();
+    drawBunting(t);
+    drawTrack();
+  },
+  yard(t) {
+    drawSky(ERA.summer, t);
+    rect(0, 58, W, H - 58, '#ead3a3');
+    for (let i = 0; i < 16; i++) rect((i * 41) % W, 62 + (i * 13) % 24, 2, 1, '#d4b884');
+    drawJars(18);
+    drawHouse(t, 'lit');
+  },
+  road(t) {
+    drawSky(ERA.summer, t);
+    drawPaddies(t);
+    drawPoles();
+    drawPath(ERA.summer);
+    drawBusStop();
+  },
+  rain(t) {
+    skyBands(ERA.rain.sky, 60);
+    if (S.clear) rect(0, 44, W, 3, '#ffdcb8');   // 비가 그치면 노을이 조금 보인다
+    drawCloud(t / 30 + 10, 8, '#c5c8dd');
+    drawCloud(t / 40 + 90, 16, '#c5c8dd');
+    drawHills(ERA.rain);
+    rect(0, 58, W, H - 58, ERA.rain.soil);
+    drawPath(ERA.rain);
+    drawPuddles(t);
+    drawHouse(t, 'rain');
+  },
+  factory(t) {
+    drawSky(ERA.sunset, t);
+    drawGround('#ead2c2');
+    drawPath(ERA.sunset);
+    drawFactory(t);
+  },
+  dorm(t) {
+    drawSky(ERA.dusk, t);
+    drawStars(t);
+    drawGround('#dccbd0');
+    drawPath(ERA.dusk);
+    drawDorm();
+  },
+  salon(t) {
+    drawSky(ERA.sunset, t);
+    drawGround('#ead2c2');
+    drawPath(ERA.sunset);
+    drawSalon(t);
+  },
+  apt(t) {
+    drawSky(ERA.sunset, t);
+    drawGround('#ead2c2');
+    drawPath(ERA.sunset);
+    drawApt('eve');
+  },
+  dawn(t) {
+    const era = S.morning ? ERA.morning : ERA.dawn;
+    drawSky(era, t);
+    if (!S.morning) {
+      drawStars(t);
+      disc(128, 12, 5, '#fff6d8');               // 초승달
+      disc(130, 11, 4, era.sky[0]);
+    }
+    drawGround(S.morning ? '#ead2c2' : '#7c82a6');
+    drawPath(era);
+    drawApt(S.morning ? 'morning' : 'dawn');
+    drawLamp(!S.morning);
+  },
+};
+
+const FRONT = {
+  jige() { drawHay(); },
+};
+
+// ─────────────────────────────────────────────
+// 4. 장면 데이터 — 글은 momdad/스토리.txt 그대로
+//    줄 하나 = 한 번 누를 때 나오는 글. { text, on } 이면 그 줄에서 on() 실행
+//    eventX 가 있으면 앞 글을 다 읽은 뒤 '눌러서 걷기' → 그 자리에서 이벤트
+//    setup() 은 장면을 시작(또는 다시 읽기)할 때마다 실행 — 등장인물 · 들고 있는 것
+//    선택지의 before(go) 는 글보다 먼저 하는 연출 (다 끝나면 go() 로 글 시작)
+// ─────────────────────────────────────────────
+const RACE = { start: 58, finish: 136 };
+
+const SCENES = [
+  {
+    chapter: '들어가며',
+    bg: 'intro',
+    actor: 'sunny',
+    feet: 70,
+    startX: 104,
+    event: [
+      '안녕 나는 써니야.',
+      '내가 이 책을 주웠는데,\n군데군데 지워져있어서...',
+      '이 책의 소녀가 슬퍼하지 않게\n나와 함께 이야기를 완성시켜줄래??',
+    ],
+    choices: [
+      { label: '그래', ok: true, lines: ['좋아! 그럼 읽어볼게!'] },
+      { label: '싫은데...', ok: true, lines: ['그래도 같이 읽어주라! 알았지??'] },
+    ],
+  },
+  {
+    chapter: '어린 시절 · 캔디캔디',
+    bg: 'candy',
+    actor: 'girl',
+    startX: 14,
+    setup() { S.carry = 'hoe'; S.working = true; },
+    noteFrom: { x: HOUSE.window.x + 6, y: HOUSE.window.y - 4 },
+    intro: [
+      '소녀는 작은 시골에서 살았대.\n소녀의 아빠는 훈장님이었고, 농사도 같이 지었었대.',
+      '언니오빠는 다 돈벌러 나갔고\n집에는 소녀와 소녀의 여동생, 어린 조카만 있었대.',
+      '소녀는 엄마아빠를 돕기 위해서\n어린나이인데도 농사일을 했대.',
+      { text: '근데 어디선가 들려오는 노래소리...?', on: () => { S.music = true; } },
+    ],
+    eventX: 92,
+    event: [
+      "'외로워도 슬퍼도 나는 안울어~\n참고 참고 또 참지 울긴 왜울어'",
+      '고개를 들어보니 여동생과 어린 조카는\n집안에서 캔디캔디를 보고있었대.',
+      '소녀는 어떻게 행동했더라?',
+    ],
+    choices: [
+      { label: '꾹 참고 일을 계속했어', ok: true, lines: [
+        { text: '소녀는 만화를 너무 보고싶었지만\n꾹 참고 농사일을 계속했대.', on: () => { S.working = true; } },
+        { text: "'외로워도 슬퍼도 나는 안울어~\n참고 참고 또 참지 울긴 왜울어'", on: () => { S.hum = true; } },
+        '만화의 내용은 몰랐지만\n계속해서 이 노래를 흥얼거리면서...',
+      ] },
+      { label: '호미를 내려놓고 같이 만화를 봤어', ok: false, walkTo: HOUSE.door, lines: [
+        '소녀는 방으로 들어가서 만화를 봤어.',
+        '너무 재밌었지만, 소녀는 엄마아빠를\n도와주지 못해서 속상했대.',
+        '배드엔딩...',
+      ] },
+    ],
+  },
+  {
+    chapter: '어린 시절 · 지게',
+    bg: 'jige',
+    actor: 'girl',
+    startX: 6,
+    setup() { S.carry = 'jige'; },
+    intro: [
+      '소녀는 계속해서 엄마아빠를 도와서 농사일을 했대.',
+      '하루는 지게를 지고 무거운걸 옮기고 있는데',
+    ],
+    eventX: 70,
+    event: [
+      { text: '학교 친구들이 소녀의 옆을 지나갔대', on: () => {
+        S.actors.push(
+          { sprite: 'friendA', x: 168, feet: 79, target: -40, speed: 0.9 },
+          { sprite: 'friendB', x: 186, feet: 79, target: -20, speed: 0.9 },
+        );
+      } },
+      { text: '소녀는 농사를 짓고있는 자신이 너무 창피해서\n친구들이 자신을 못알아차리게 숨어버렸대', on: () => walkTo(HAY.x + 4, null, 1) },
+    ],
+    choices: [
+      { label: '나 농사 안해!', ok: false, lines: [
+        { text: '농사짓느라 얼굴도 까매지고, 내 친구들은 다 노는데\n나 안해! 나도 이쁠래!', on: () => { S.carry = null; walkTo(60); } },
+        '막상 이렇게 말은 했지만,\n소녀는 마음이 너무 아팠대',
+        '배드엔딩...',
+      ] },
+      { label: '그래도 엄마랑 오빠가 힘들어...', ok: true, lines: [
+        { text: '평생 일만했던 엄마와 오빠가 너무 불쌍해서\n소녀는 친구들이 지나가고 나서 다시 지게를 들었대', on: () => walkTo(124) },
+        { text: '힘들어도 꾹 참고 캔디캔디의 주인공처럼 ...', on: () => { S.hum = true; } },
+      ] },
+    ],
+  },
+  {
+    chapter: '학창 시절 · 달리기',
+    bg: 'race',
+    actor: 'teenGym',
+    startX: -16,
+    setup() {
+      S.actors.push(
+        // 세 줄로 서면 머리가 겹쳐서, 뒤 레인일수록 왼쪽에 비켜 선다
+        { sprite: 'rivalB', x: RACE.start - 52, feet: 73 },
+        { sprite: 'rivalA', x: RACE.start - 34, feet: 80 },
+      );
+    },
+    intro: [
+      '소녀는 엄청 부지런했어.\n버스비가 아까워서 항상 일찍 일어나서 학교에 걸어다녔대',
+      '그래서 그런가,\n소녀는 몸도 엄청 튼튼했고 운동도 잘했어.',
+      '어느날\n운동회가 열리는데 달리기 선수를 뽑는다네??',
+    ],
+    eventX: RACE.start - 16,
+    event: [
+      '소녀는 고민했어.\n농사일을 해야하는데, 해도될까??',
+    ],
+    choices: [
+      { label: '하고싶어!', ok: true, lines: [
+        { text: '소녀는 그동안 쌓아놓은 강한 체력을 믿고,\n달리기를 하기로 했대', on: () => {
+          walkTo(RACE.finish + 4, null, 1.5);
+          S.actors[0].target = RACE.finish - 24; S.actors[0].speed = 1.1;
+          S.actors[1].target = RACE.finish - 14; S.actors[1].speed = 1.25;
+        } },
+        { text: '역시나\n소녀는 1등을 했고 너무 기뻤대!', on: () => burst(50) },
+      ] },
+      { label: '집가서 농사나 하자', ok: false, lines: [
+        { text: '그래 내가 무슨 달리기야... 일이나 하자', on: () => walkTo(-24, null, 0.5) },
+        '소녀는 달리기를 하고 싶었지만\n집으로 가서 농사일을 도왔대.',
+        { text: '그치만...달리기를 했으면 일등을 했겠지...?', on: () => {
+          S.actors[0].target = RACE.finish + 30; S.actors[0].speed = 1.2;
+          S.actors[1].target = RACE.finish + 40; S.actors[1].speed = 1.3;
+        } },
+        '배드엔딩...',
+      ] },
+    ],
+  },
+  {
+    chapter: '학창 시절 · 술 심부름',
+    bg: 'yard',
+    actor: 'teenHome',
+    startX: -16,
+    setup() {
+      S.carry = 'kettle';
+      S.actors.push({ sprite: 'father', x: 118, feet: 84, dir: 'left', hat: true });
+    },
+    intro: [
+      '소녀의 아버지는 멋진 훈장님이였는데,\n술을 좋아하는게 조금...아주아주 조금 흠이였어.',
+      '소녀의 아버지는 소녀에게 술 심부름을 시켰대',
+    ],
+    eventX: 86,
+    event: [
+      '소녀는 술심부름을 받았을 때 어떻게 했지?',
+    ],
+    choices: [
+      { label: '술에 물을 섞어서 갖다드리기', ok: true, lines: [
+        '소녀는 아버지가 술을 마시는게 너무 싫었대',
+        { text: '그래서 소녀는 아버지의 술에\n몰래 물을 타서 갖다드렸대.', on: () => { S.pour = 60; } },
+        '다행히 아버지는 눈치를 채지 못하고 술을 마셨대.',
+      ] },
+      { label: '술을 그대로 갖다드리기', ok: false, lines: [
+        '소녀는 아버지가 시키는대로 술을 그냥 갖다드렸대.',
+        { text: '술을 마시는 아버지를 보면서\n소녀는 너무 속상했대', on: () => { S.actors[0].sprite = 'fatherDrunk'; } },
+        '배드엔딩...',
+      ] },
+    ],
+  },
+  {
+    chapter: '학창 시절 · 통학길',
+    bg: 'road',
+    actor: 'teen',
+    startX: -16,
+    intro: [
+      '소녀는 고등학교에 가서도 걸어서 등교를 했는데',
+      '초등학교, 중학교때랑 다르게\n고등학교는 걸어서 1시간이 넘게 걸렸대',
+    ],
+    eventX: BUS_STOP - 22,
+    event: [
+      '1시간동안 그냥 걷기 너무 힘든데...',
+    ],
+    choices: [
+      { label: '공부하면서 걷기', ok: true, lines: [
+        { text: '소녀는 걸어다니면서 암기과목들을 공부했대', on: () => { S.carry = 'book'; S.study = true; } },
+        { text: '어머... 8등???', on: () => burst(50) },
+        '이 작은 시골에서 여자가 8등을 하기 쉽지 않은데\n다들 너무 놀라서 소녀를 칭찬했대!',
+        '소녀는 너무 기뻤대.',
+      ] },
+      { label: '그냥 버스타기', ok: false,
+        // 버스가 와서 소녀를 태우고 떠난 뒤에 글이 나온다
+        before(go) {
+          const bus = { kind: 'bus', x: 172, target: S.x - 18, speed: 1.2, layer: 'front' };
+          bus.arrive = () => {
+            S.hidden = true;
+            setTimeout(() => { bus.target = -60; bus.arrive = go; }, 500);
+          };
+          S.actors.push(bus);
+        },
+        lines: [
+          '1시간이나 어떻게 걸어 그냥 버스타자!',
+          '소녀는 편하게 학교를 갔지만,\n계속해서 그냥 걸어갈걸... 이라는 생각이 들어서 너무 슬펐대',
+          '배드엔딩...',
+        ] },
+    ],
+  },
+  {
+    chapter: '학창 시절 · 비 오는 날',
+    bg: 'rain',
+    actor: 'teen',
+    startX: -16,
+    setup() { S.tear = true; S.rain = true; },
+    intro: [
+      '아...아버지!!',
+      '소녀의 아버지가 갑자기 돌아가셨대...',
+      '원인은...바로 술...!!',
+    ],
+    eventX: 84,
+    event: [
+      '소녀는 너무 슬퍼서 어떻게 했지??',
+    ],
+    choices: [
+      { label: '술을 더 많이 싫어하게 됐어', ok: true, lines: [
+        '소녀는 아버지를 다시는 못보게 만든\n술을 매우 싫어하게 됐어.',
+        { text: '절대 술에 손대지 않겠어. 내 곁의 누구라도...', on: () => { S.tear = false; } },
+        { text: '소녀는 그렇게 생각했어.', on: () => { S.clear = true; S.rain = false; } },
+      ] },
+      { label: '술을 배웠어', ok: false, lines: [
+        '소녀는 아버지를 잃은 슬픔에 술에 손을 대고 말았어.',
+        '한잔 두잔....',
+        '하지만 소녀의 슬픔은 술과 함께\n계속해서 소녀의 마음속에 쌓이게 되었어.',
+        '배드엔딩...',
+      ] },
+    ],
+  },
+  {
+    chapter: '어른 · 공장',
+    bg: 'factory',
+    actor: 'worker',
+    startX: -16,
+    intro: [
+      '소녀는 고등학교를 졸업하고 성인이됐어.',
+      '그시기의 누구나 다 그렇듯\n소녀도 곧바로 취직을 해야했어.',
+      '다행히 소녀는 소녀의 친구를 따라서\n한 공장에 취직할 수 있었어.',
+      '소녀는 회사의 기숙사에서 교대로 일을 하면서\n열심히 돈을 벌었어.',
+    ],
+    eventX: 88,
+    event: [
+      '근데... 뭔지 모를 이 허무함',
+      '소녀는 어떻게 했지?',
+    ],
+    choices: [
+      { label: '회사를 그만두고 성인의 밤을 즐겼어', ok: false, lines: [
+        { text: '소녀는 이 허무함을 달래기 위해서\n음주가무를 시작했어.', on: () => { S.party = true; } },
+        '찬란한 밤이 너무 행복했지만\n허무함은 사라지지 않았어.',
+        '배드엔딩...',
+      ] },
+      { label: '회사를 다니면서 공부를 했어', ok: true, lines: [
+        { text: '소녀는 이것저것 배우러 다녔어.\n서예, 지점토, 종이접기...', on: () => { S.study = true; } },
+        '소녀는 손재주가 좋았어.',
+        '이번에 미용도 배워봤는데 실력이 좋다네??',
+        { text: '내친김에 미용사 자격증도 땄어!', on: () => burst(50) },
+        '소녀는 너무 행복했어.',
+      ] },
+    ],
+  },
+  {
+    chapter: '어른 · 기숙사 앞',
+    bg: 'dorm',
+    actor: 'worker',
+    startX: 14,
+    intro: [
+      '성인이 된 소녀는 엄청 이뻤어.',
+      { text: '회사의 소년들이 소녀에게 엄청 들이댔어.\n훗훗', on: () => {
+        S.actors.push(
+          { sprite: 'suitorA', x: 170, feet: 82, target: 34, speed: 0.9, heart: true },
+          { sprite: 'suitorB', x: 190, feet: 85, target: 52, speed: 0.9, heart: true },
+        );
+      } },
+      { text: '소녀는 거절에 익숙했어', on: () => {
+        S.actors.forEach((a) => { a.target = 190; a.heart = false; });
+      } },
+      { text: '그런데 갑자기', on: () => {
+        S.actors.push({ sprite: 'boy', x: 116, feet: 84, target: 102, speed: 0.6, boy: true });
+      } },
+    ],
+    eventX: 80,
+    event: [
+      "'저를 왜요?? 저를 왜 거절하신거죠??'",
+      '어떤 소년이 소녀의 기숙사 앞에서\n소녀를 기다리고있었어',
+      { text: '어라..?? 잘생겼네??', on: () => { S.shine = true; } },
+    ],
+    choices: [
+      { label: '소년을 받아준다', ok: true, lines: [
+        { text: '이렇게 반응한 남자...처음이야..!!', on: () => { S.shine = false; S.love = true; } },
+        '소녀는 얼떨결에 고백을 받았는데\n그 막무가내인 소년의 태도...',
+        '자신의 마음을 솔직하게 표현하는 소년이\n사실 내심 좋았나봐 (꺄 ><// )',
+        '아니 심지어 이 소년...\n술을 한잔도 못하는 완전 초식남이잖아??',
+        { text: '소녀는 소년에게 점점 더 마음을 열었어.', on: () => {
+          const boy = S.actors.find((a) => a.boy);
+          boy.follow = boy.x - S.x;   // 이제 같이 걷는다
+        } },
+      ] },
+      { label: '그래도 싫다', ok: false, lines: [
+        { text: '뭐야 이 막무가내는...?\n그리고 너무 잘 놀것처럼 생겼잖아??', on: () => { S.shine = false; } },
+        { text: '소녀는 그를 거절했어.', on: () => walkTo(-24) },
+        '근데 시간이 지날수록 계속 그가 생각나서\n아무것도 하지 못했대...',
+        '배드엔딩...',
+      ] },
+    ],
+  },
+  {
+    chapter: '어른 · 결혼',
+    bg: 'factory',
+    actor: 'worker',
+    startX: 28,
+    setup() {
+      S.actors.push({ sprite: 'boyWorker', x: 10, feet: 84, follow: -18 });
+    },
+    intro: [
+      { text: '소녀와 소년은 행복한 연애를 하고...', on: () => { S.love = true; } },
+      { text: '결혼을 했어! (축하축하!!)', on: () => burst(70) },
+      { text: '아이를 낳고 행복하게 살아가고 싶은데', on: () => { S.love = false; } },
+      '소녀와 소년 둘 다 공장에서\n교대근무를 하고있었어',
+    ],
+    eventX: 84,
+    event: [
+      '계속 교대근무를 하면서\n아이를 잘 키울 수 있을까??',
+    ],
+    choices: [
+      { label: '그래도 일은 해야지', ok: false, lines: [
+        '그래도 먹고살려면 일은 해야지 어쩌겠어.',
+        '소녀는 갈수록 몸이 안좋아지는걸 느꼈지만\n밤낮을 바꿔가며 계속 일을 했는데',
+        '헉... 이대로는 아이를 가질 수 없어',
+        '배드엔딩...',
+      ] },
+      { label: '어쩔 수 없이 그만둬야지', ok: true, lines: [
+        '소녀는 일을 그만뒀어.',
+        { text: '다행히 예전에 소녀가 땄던\n미용사 자격증이 있네!?', on: () => burst(30) },
+      ] },
+    ],
+  },
+  {
+    chapter: '어른 · 미용실과 육아',
+    bg: 'salon',
+    actor: 'adult',
+    startX: 34,
+    intro: [
+      '소녀는 미용실에 취직해서 일을 할 수 있었어',
+      '하루종일 일어서서 일을 하는게 힘들었지만\n그래도 아이를 낳고 기르는데는 문제없지!!',
+      { text: '소년과 소녀는 아이를 가지게 되었어.', on: () => {
+        S.actors.push(
+          { sprite: 'son', x: S.x - 13, feet: 86, follow: -13 },
+          { sprite: 'daughter', x: S.x - 25, feet: 86, follow: -25 },
+        );
+      } },
+      '첫째는 건강하고 듬직한 남자아이!\n둘째는 귀엽고 이쁜 여자아이!',
+      '두 아이를 키우는데 일을 하면서 키우려니까\n너무 힘드네...?',
+      { text: '결국 소녀는 미용사 일을 그만두고\n육아에 전념하게 되었어.', on: () => setBg('apt') },
+      '아이들이 어느정도 커서\n새벽에 깨지 않고 잠을 잘 자는 나이가 되었어',
+      '오...이제 다시 일을 할 수 있겠다.',
+      '하지만 소녀는 나가서 일하기엔\n아이들이 걱정됐어.',
+    ],
+    eventX: 74,
+    event: [
+      '집에서 주판 알도 끼우고 이것저것 했는데\n돈이 안되네?? 어쩌지??',
+    ],
+    choices: [
+      { label: '어쩔수없이 육아에 전념하자', ok: false, lines: [
+        '살을 주고 뼈를 깎는다고 하지\n돈은 못벌지만 그만큼 아이들을 열심히 키우면되지!',
+        '하지만 갈수록 부족해지는 돈은\n소녀를 슬프게 만들었어',
+        '배드엔딩...',
+      ] },
+      { label: '새벽에 일을 해야하나?', ok: true, lines: [
+        { text: '아이들이 다 자는 새벽에\n일을 하면 되지 않을까?', on: () => {
+          setBg('dawn');                 // 아이들은 자고, 소녀 혼자 새벽에 나간다
+          S.actors = [];
+          S.look = 'adultDawn';
+          S.carry = 'paper';
+          S.x = 8;
+          S.dir = 'right';
+        } },
+        { text: '소녀는 새벽에 할 수 있는 신문배달을 시작했어.', on: () => walkTo(56, null, 0.5) },
+        '어렸던 소녀는 어두운 밤이 너무 무서웠어.',
+        '특히 복도식 아파트의 어두운 복도 끝에\n누가 있을까봐 무서웠대',
+        { text: '심지어 비오는날은\n신문이 젖지않게 조심히 배달해야했대', on: () => { S.rain = true; walkTo(104, null, 0.5); } },
+        { text: '새벽에 배달일을 끝내고 잠깐 눈을 붙이면\n다시 아이들을 돌봐야했어.', on: () => { S.rain = false; S.carry = null; } },
+        { text: '소녀는 엄청 피곤했지만,\n가끔 새벽에 일을 하고 돌아왔을때', on: () => {
+          S.morning = true;              // 돌아올 때는 해가 뜬다
+          walkTo(52, null, 0.6);
+        } },
+        { text: '일어나서 소녀를 기다리고있는 아이들이\n너무 귀엽고 기특해서,', on: () => {
+          S.actors.push(
+            { sprite: 'son', x: 30, feet: 86, follow: -13, dir: 'right' },
+            { sprite: 'daughter', x: 18, feet: 86, follow: -25, dir: 'right' },
+          );
+          S.love = true;
+        } },
+        '일을 계속할 수 있었대',
+      ] },
+    ],
+  },
+];
+
+// ─────────────────────────────────────────────
+// 5. 진행 — 누르기(또는 스페이스바) 하나로 다 한다 (글 넘기기 · 걷기)
+//    배드엔딩 뒤에는 그 장면부터 다시 (문서의 '정한 것')
+// ─────────────────────────────────────────────
+const sayEl = document.getElementById('say');
+const hintEl = document.getElementById('hint');
+const choicesEl = document.getElementById('choices');
+const chapterEl = document.getElementById('chapter');
+
+const S = {};          // 지금 장면 상태
+let waitClick = null;  // 다음에 누르면 할 일
+let typing = null;
+let typeTimer = null;
+let queue = [];
+let afterLines = null;
+
+const hint = (text) => { hintEl.textContent = text; };
+
+function say(lines, done) {
+  queue = [...lines];
+  afterLines = done;
+  nextLine();
+}
+
+function nextLine() {
+  if (!queue.length) {
+    const f = afterLines;
+    afterLines = null;
+    if (f) f();
+    return;
+  }
+  const line = queue.shift();
+  const text = typeof line === 'string' ? line : line.text;
+  if (line.on) line.on();
+  hint('');
+  let i = 0;
+  typing = text;
+  sayEl.textContent = '';
+  clearInterval(typeTimer);
+  typeTimer = setInterval(() => {
+    i++;
+    sayEl.textContent = text.slice(0, i);
+    if (i >= text.length) finishTyping();
+  }, 45);
+}
+
+function finishTyping() {
+  clearInterval(typeTimer);
+  sayEl.textContent = typing;
+  typing = null;
+  hint('▼');
+  waitClick = nextLine;
+}
+
+function advance() {
+  if (fading) return;
+  if (typing) { finishTyping(); return; }
+  if (waitClick) {
+    const f = waitClick;
+    waitClick = null;
+    f();
+  }
+}
+
+document.getElementById('book').addEventListener('click', advance);
+
+// 스페이스바 = 누르기. 선택지는 고르는 거라 스페이스로 안 넘어간다 (마우스·터치로 고른다)
+document.addEventListener('keydown', (ev) => {
+  if (ev.code !== 'Space') return;
+  ev.preventDefault();   // 화면 스크롤 · 포커스된 버튼 눌림 막기
+  if (!ev.repeat) advance();
+});
+
+// 다음 장면으로 넘어갈 때: 하얘졌다가 → 장면 바꾸고 → 다시 밝아진다
+const FADE_MS = 600;
+const fadeEl = document.getElementById('fade');
+let fading = false;
+function fadeTo(fn) {
+  fading = true;
+  hint('');
+  fadeEl.classList.add('on');
+  setTimeout(() => {
+    fn();
+    fadeEl.classList.remove('on');
+    setTimeout(() => { fading = false; }, FADE_MS);
+  }, FADE_MS + 200);
+}
+
+function walkTo(x, done, speed = 0.6) {
+  S.target = x;
+  S.arrive = done;
+  S.speed = speed;
+  S.working = false;
+}
+
+function startScene(i) {
+  const sc = SCENES[i];
+  if (!sc) { showEnd(); return; }
+  Object.assign(S, {
+    scene: i, sc, x: sc.startX, target: null, arrive: null, speed: 0.6, step: 0, dir: 'right',
+    working: false, carry: null, music: false, hum: false, study: false, tear: false, clear: false,
+    pour: 0, hidden: false, sparkle: false, eraseAt: null, actors: [], parts: [],
+    look: null, bg: null, flashAt: null, love: false, party: false, rain: false, morning: false, shine: false,
+  });
+  if (sc.setup) sc.setup();
+  chapterEl.textContent = sc.chapter;
+  sayEl.classList.remove('erased');
+  choicesEl.innerHTML = '';
+  say(sc.intro || [], () => {
+    if (sc.eventX == null) { runEvent(); return; }
+    hint('화면을 누르면 걸어가요 ▶');
+    S.sparkle = true;
+    waitClick = () => { S.sparkle = false; walkTo(sc.eventX, runEvent); };
+  });
+}
+
+// 장면 안에서 배경이 바뀔 때 (미용실 → 아파트 → 새벽) 화면이 잠깐 하얗게 번쩍
+function setBg(name) {
+  S.bg = name;
+  S.flashAt = performance.now();
+}
+
+function runEvent() {
+  say(S.sc.event, showChoices);
+}
+
+function showChoices() {
+  hint('');
+  S.sc.choices.forEach((ch) => {
+    const btn = document.createElement('button');
+    btn.textContent = ch.label;
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      choicesEl.innerHTML = '';
+      pick(ch);
+    });
+    choicesEl.appendChild(btn);
+  });
+}
+
+function pick(ch) {
+  const go = () => say(ch.lines, () => (ch.ok ? sceneClear() : badEnding()));
+  if (ch.before) ch.before(go);
+  else if (ch.walkTo != null) walkTo(ch.walkTo, () => { S.hidden = true; go(); });
+  else go();
+}
+
+function sceneClear() {
+  hint('다음 장면 ▶');
+  waitClick = () => {
+    const next = () => fadeTo(() => startScene(S.scene + 1));
+    if (S.sc.bg === 'intro') { next(); return; }
+    walkTo(W + 4, next, Math.max(S.speed, 0.6));   // 오른쪽으로 걸어 나간 뒤 하얘진다
+  };
+}
+
+// 화면을 까맣게 하지 않는다 — 지우개로 지우듯 그림·글씨가 번진다
+function badEnding() {
+  hint('');
+  S.eraseAt = performance.now();
+  setTimeout(() => sayEl.classList.add('erased'), 300);
+  setTimeout(() => {
+    const btn = document.createElement('button');
+    btn.textContent = '이 장면 다시 읽기';
+    btn.addEventListener('click', (ev) => { ev.stopPropagation(); startScene(S.scene); });
+    choicesEl.appendChild(btn);
+  }, 1600);
+}
+
+function showEnd() {
+  Object.assign(S, {
+    sc: { bg: 'intro' }, x: -99, target: null, actors: [], parts: [],
+    music: false, hum: false, study: false, eraseAt: null, hidden: true,
+    look: null, bg: null, flashAt: null, love: false, party: false, rain: false, morning: false, shine: false,
+  });
+  chapterEl.textContent = '';
+  say(['지금은 여기까지예요.\n뒷이야기는 아직 쓰는 중이에요.'], () => {
+    hint('처음부터 ▶');
+    waitClick = () => fadeTo(() => startScene(0));
+  });
+}
+
+// ─────────────────────────────────────────────
+// 6. 움직임 · 그리기
+// ─────────────────────────────────────────────
+const ERASE_CELL = 4;
+const ERASE_RAND = Array.from({ length: (W / ERASE_CELL) * Math.ceil(H / ERASE_CELL) }, Math.random);
+const CONFETTI = ['#ff7a7a', '#ffd35a', '#7cc56b', '#5a8fd6', '#f27a9b', '#ffffff'];
+
+// 소녀 · 등장인물 공통: target 까지 speed 로 걷고, 도착하면 arrive()
+function moveToward(o) {
+  if (o.target == null) return;
+  const d = o.target - o.x;
+  o.dir = d < 0 ? 'left' : 'right';
+  o.x += Math.sign(d) * Math.min(Math.abs(d), o.speed || 0.6);
+  o.step = (o.step || 0) + 1;
+  if (Math.abs(o.target - o.x) < 0.01) {
+    o.x = o.target;
+    o.target = null;
+    const f = o.arrive;
+    o.arrive = null;
+    if (f) f();
+  }
+}
+
+function girlSprite() {
+  return SPRITES[S.look || S.sc.actor][S.dir || 'right'];
+}
+
+function burst(n) {
+  for (let i = 0; i < n; i++) {
+    S.parts.push({ kind: 'confetti', x: Math.random() * W, y: -Math.random() * 30, vx: (Math.random() - 0.5) * 0.4, vy: 0.4 + Math.random() * 0.5, life: 200, color: CONFETTI[i % CONFETTI.length] });
+  }
+}
+
+function update(t) {
+  moveToward(S);
+  // follow: 소녀와 그만큼 떨어져서 따라 걷는다 (남편 · 아이들)
+  S.actors.forEach((a) => {
+    if (a.follow == null) return;
+    const tx = S.x + a.follow;
+    if (Math.abs(tx - a.x) > 1) { a.target = tx; a.speed = Math.max(S.speed || 0.6, 0.6); }
+    else { a.target = null; a.dir = S.dir; }
+  });
+  S.actors.forEach(moveToward);
+  const headY = S.sc.actor ? FEET - girlSprite().stand.height - 2 : 0;
+  // 음표: 창문에서, 흥얼거릴 때는 소녀 머리에서 / 공부할 때는 글자
+  if (S.music && S.sc.noteFrom && t % 40 === 0) S.parts.push({ kind: 'note', x: S.sc.noteFrom.x, y: S.sc.noteFrom.y, life: 120 });
+  if (S.hum && !S.hidden && t % 55 === 0) S.parts.push({ kind: 'note', x: S.x + 12, y: headY, life: 120 });
+  if (S.study && t % 35 === 0) S.parts.push({ kind: 'letter', x: S.x + 10, y: headY, life: 100 });
+  if (S.love && !S.hidden && t % 30 === 0) S.parts.push({ kind: 'heart', x: S.x + 4 + Math.random() * 10, y: headY, life: 110 });
+  S.actors.forEach((a) => {
+    if (a.heart && t % 45 === 0) S.parts.push({ kind: 'heart', x: a.x + 6, y: a.feet - 30, life: 90 });
+  });
+  if (S.pour > 0) {   // 주전자에 몰래 물 타기
+    S.pour--;
+    if (S.pour % 4 === 0) S.parts.push({ kind: 'drop', x: S.x + 14 + Math.random() * 3, y: FEET - 22, vy: 0.5, life: 22 });
+  }
+  S.parts.forEach((p) => {
+    p.age = (p.age || 0) + 1;
+    if (p.kind === 'note' || p.kind === 'letter' || p.kind === 'heart') { p.y -= 0.25; p.x += Math.sin(p.age / 10) * 0.3; }
+    else { p.x += p.vx || 0; p.y += p.vy || 0; }
+  });
+  S.parts = S.parts.filter((p) => p.age < p.life && p.y < H + 4);
+}
+
+function drawActor(a, t) {
+  if (a.kind === 'bus') { drawBus(a.x); return; }
+  const frames = SPRITES[a.sprite][a.dir || 'right'];
+  const img = a.target != null ? frames.walk[Math.floor(a.step / (a.speed > 1 ? 5 : 10)) % 2] : frames.stand;
+  const x = Math.round(a.x), y = a.feet - (img.height - 1);
+  ctx.drawImage(img, x, y);
+  if (a.hat) {   // 훈장님 갓 + 흰 수염
+    rect(x - 1, y + 2, 18, 1, '#2e2622');
+    rect(x + 4, y - 2, 8, 4, '#2e2622');
+    rect(x + 6, y + 12, 4, 3, '#f4f1ea');
+  }
+}
+
+function drawGirl(t) {
+  const frames = girlSprite();
+  const walking = S.target != null;
+  const img = walking ? frames.walk[Math.floor(S.step / (S.speed > 1 ? 5 : 10)) % 2] : frames.stand;
+  const bob = S.working && Math.floor(t / 20) % 2 ? 1 : 0;   // 호미질
+  const x = Math.round(S.x);
+  const y = (S.sc.feet || FEET) - (img.height - 1) + bob;
+  const hand = y + img.height - 9;
+  const front = S.dir === 'left' ? -1 : 1;
+  const hx = S.dir === 'left' ? x + 2 : x + 13;
+  if (S.carry === 'jige') {                      // 지게 (등 뒤라 몸보다 먼저)
+    const bx = S.dir === 'left' ? x + 9 : x - 3;
+    rect(bx, y - 3, 10, 18, PALETTE.o);            // 짐 (볏짚 다발) — 머리 위로 삐죽
+    rect(bx + 1, y - 2, 8, 16, '#e3bf6a');
+    rect(bx + 1, y + 2, 8, 1, '#c9a050');
+    rect(bx + 1, y + 8, 8, 1, '#c9a050');
+    rect(bx + 2, y + 15, 1, 9, '#8a5a3c');         // 지게 다리
+    rect(bx + 7, y + 15, 1, 9, '#8a5a3c');
+  }
+  ctx.drawImage(img, x, y);
+  if (S.carry === 'hoe' && S.working) {
+    rect(hx, y + 15, 1, 6, '#9a6a44');
+    rect(hx - 1 + bob * front, y + 21, 3, 2, '#8a93a6');
+  }
+  if (S.carry === 'kettle') {
+    rect(hx - 1, hand + 1, 5, 4, PALETTE.o);
+    rect(hx, hand + 2, 3, 2, '#b9c2cc');
+    rect(hx + (front > 0 ? 4 : -2), hand + 1, 1, 1, PALETTE.o);
+  }
+  if (S.carry === 'paper') {                     // 신문 뭉치
+    rect(hx - 3, hand - 2, 7, 6, PALETTE.o);
+    rect(hx - 2, hand - 1, 5, 4, '#f4f1ea');
+    rect(hx - 2, hand, 5, 1, '#b8b4a8');
+  }
+  if (S.carry === 'book') {
+    rect(hx - 1, hand - 1, 4, 5, PALETTE.o);
+    rect(hx, hand, 2, 3, '#5a8fd6');
+  }
+  if (S.tear && Math.floor(t / 30) % 3 !== 0) {
+    const tx = S.dir === 'left' ? x + 4 : x + 11;
+    rect(tx, y + 10 + (Math.floor(t / 10) % 3), 1, 2, '#9cd3f5');
+  }
+}
+
+function drawParts() {
+  S.parts.forEach((p) => {
+    if (p.kind === 'note' || p.kind === 'letter' || p.kind === 'heart') {
+      ctx.globalAlpha = Math.max(0, 1 - p.age / p.life);
+      ctx.drawImage(SPRITES[p.kind], Math.round(p.x), Math.round(p.y));
+    } else if (p.kind === 'confetti') {
+      ctx.globalAlpha = 1;
+      rect(p.x, p.y, 2, 1 + (Math.floor(p.age / 8) % 2), p.color);
+    } else if (p.kind === 'drop') {
+      ctx.globalAlpha = 1;
+      rect(p.x, p.y, 1, 2, '#7fc8e8');
+    }
+  });
+  ctx.globalAlpha = 1;
+}
+
+function draw(t, now) {
+  const sc = S.sc;
+  const bg = S.bg || sc.bg;
+  BG[bg](t);
+
+  S.actors.filter((a) => a.layer !== 'front').forEach((a) => drawActor(a, t));
+  if (S.sparkle) drawSparkle(sc.eventX + 8, 52, t);
+  if (S.shine) {                                 // 잘생겼네?? — 소년 옆에 반짝
+    const boy = S.actors.find((a) => a.boy);
+    if (boy) { drawSparkle(boy.x + 15, boy.feet - 26, t); drawSparkle(boy.x - 2, boy.feet - 16, t + 15); }
+  }
+  if (!S.hidden && sc.actor) drawGirl(t);
+  if (FRONT[bg]) FRONT[bg](t);
+  S.actors.filter((a) => a.layer === 'front').forEach((a) => drawActor(a, t));
+  drawParts();
+  if (S.party) drawParty(t);
+  if (S.rain) drawRain(t);
+  if (S.flashAt != null && now - S.flashAt < 500) {
+    ctx.globalAlpha = 1 - (now - S.flashAt) / 500;
+    rect(0, 0, W, H, '#ffffff');
+    ctx.globalAlpha = 1;
+  }
+
+  if (S.eraseAt != null) {
+    const p = Math.min(1, (now - S.eraseAt) / 1400) * 0.85;
+    ctx.fillStyle = PAPER;
+    const cols = W / ERASE_CELL;
+    ERASE_RAND.forEach((r, i) => {
+      if (r < p) ctx.fillRect((i % cols) * ERASE_CELL, Math.floor(i / cols) * ERASE_CELL, ERASE_CELL, ERASE_CELL);
+    });
+  }
+}
+
+let tick = 0;
+function loop(now) {
+  tick++;
+  update(tick);
+  draw(tick, now);
+  requestAnimationFrame(loop);
+}
+
+startScene(0);
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+# main 에 push 하면 게임(index.html)을 GitHub Pages 로 배포한다
+# 처음 한 번: 저장소 Settings → Pages → Source 를 "GitHub Actions" 로 바꿔야 한다
+name: Deploy game to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 사이트에는 게임 파일만 올린다 (스토리 원문 · 연표 txt/md 는 사이트 주소로 안 나가게)
+      - name: Collect site files
+        run: |
+          mkdir _site
+          cp index.html _site/
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
