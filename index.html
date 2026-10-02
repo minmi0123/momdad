@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>엄마 이야기</title>
+<title>써니의 책</title>
 <style>
   /* 밝게: 직장인 게임 2개(바탕 #1d1a22)와 반대로, 펼친 책 종이 느낌 */
   :root {
@@ -42,7 +42,68 @@
     gap: 10px;
     cursor: pointer;
   }
-  #chapter { color: var(--muted); font-size: 14px; min-height: 18px; }
+  #top { display: flex; justify-content: space-between; align-items: center; min-height: 22px; }
+  #chapter { color: var(--muted); font-size: 14px; }
+  #home {
+    font: inherit;
+    font-size: 13px;
+    color: var(--muted);
+    background: none;
+    border: 2px solid var(--edge);
+    border-radius: 4px;
+    padding: 1px 8px;
+    cursor: pointer;
+  }
+  #stage { position: relative; }
+  /* 메인 화면 제목 — 캔버스 위 하늘 자리에 */
+  #titleText {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 12%;
+    text-align: center;
+    font-size: clamp(30px, 9vw, 60px);
+    font-weight: bold;
+    letter-spacing: .08em;
+    color: #fff8ea;
+    text-shadow: 3px 0 0 var(--ink), -3px 0 0 var(--ink), 0 3px 0 var(--ink), 0 -3px 0 var(--ink),
+                 3px 3px 0 var(--ink), -3px 3px 0 var(--ink), 3px -3px 0 var(--ink), -3px -3px 0 var(--ink),
+                 0 7px 0 var(--ink);
+    pointer-events: none;
+  }
+  .title #titleText { display: block; }
+  .title #home { visibility: hidden; }
+  .title #say { text-align: center; color: var(--muted); }
+  #choices button:disabled { opacity: .4; cursor: default; box-shadow: none; }
+  /* 타임라인: 책 한 장을 덮는 목록 */
+  #timeline {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: var(--paper);
+    border-radius: 4px;
+    padding: 14px;
+    overflow-y: auto;
+    cursor: default;
+  }
+  #timeline.on { display: block; }
+  #tlHead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 18px; }
+  #tlClose { font: inherit; font-size: 14px; color: var(--ink); background: var(--pick); border: 2px solid var(--ink); border-radius: 4px; padding: 4px 12px; cursor: pointer; }
+  .tl-era { color: var(--muted); font-size: 14px; margin: 12px 0 6px; }
+  .tl-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tl-row button {
+    font: inherit;
+    font-size: 14px;
+    color: var(--ink);
+    background: #fff;
+    border: 2px solid var(--ink);
+    border-radius: 4px;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+  .tl-row button:disabled { color: var(--muted); border-color: var(--edge); cursor: default; }
   #game {
     display: block;
     width: 100%;
@@ -110,11 +171,24 @@
 </head>
 <body>
 <main id="book">
-  <div id="chapter"></div>
-  <canvas id="game" width="160" height="90"></canvas>
+  <div id="top">
+    <span id="chapter"></span>
+    <button id="home" type="button">처음 화면</button>
+  </div>
+  <div id="stage">
+    <canvas id="game" width="160" height="90"></canvas>
+    <div id="titleText">써니의 책</div>
+  </div>
   <div id="say"></div>
   <div id="choices"></div>
   <div id="hint"></div>
+  <div id="timeline">
+    <div id="tlHead">
+      <b>타임라인</b>
+      <button id="tlClose" type="button">닫기</button>
+    </div>
+    <div id="tlList"></div>
+  </div>
   <div id="fade"></div>
 </main>
 <script>
@@ -1010,6 +1084,17 @@ const BG = {
   },
 };
 
+// 메인 화면 — 엔딩까지 본 적이 있으면 책이 다 채워져 있다
+BG.title = function (t) {
+  drawSky(ERA.morning, t);
+  rect(0, 60, W, H - 60, '#d8efc0');
+  rect(0, 60, W, 1, '#b8e09a');
+  for (let x = 3; x < W; x += 7) rect(x, 58 + (x % 3), 1, 2, '#9ad27c');
+  drawBook(52, 60);
+  drawSparkle(48, 58, t);
+  drawSparkle(95, 54, t + 20);
+};
+
 const FRONT = {
   jige() { drawHay(); },
 };
@@ -1852,17 +1937,50 @@ function walkTo(x, done, speed = 0.6) {
   S.working = false;
 }
 
-function startScene(i) {
-  const sc = SCENES[i];
-  if (!sc) { showEnd(); return; }
-  Object.assign(S, {
-    scene: i, sc, x: sc.startX, target: null, arrive: null, speed: 0.6, step: 0, dir: 'right',
+// 장면 상태 기본값 (장면 시작 · 끝 화면 · 메인 화면에서 같이 쓴다)
+function freshState() {
+  return {
+    scene: null, sc: null, x: 0, target: null, arrive: null, speed: 0.6, step: 0, dir: 'right',
     working: false, carry: null, music: false, hum: false, study: false, tear: false, clear: false,
     pour: 0, hidden: false, sparkle: false, eraseAt: null, actors: [], parts: [],
     look: null, bg: null, flashAt: null, love: false, party: false, rain: false, morning: false, shine: false,
     bell: false, gloom: false, shake: 0, fire: false, smoke: false, kidsIn: 0, milkPile: 0,
     sign: false, cap: false, bookDone: false, feet: null, props: [],
-  });
+  };
+}
+
+// 진행 저장 (이 브라우저에만). cur = 이어하기 할 장면, max = 가 본 가장 뒤 장면 (타임라인 잠금 해제)
+const SAVE_KEY = 'sunny-book-v1';
+function loadSave() {
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || { cur: null, max: -1, done: false }; }
+  catch (e) { return { cur: null, max: -1, done: false }; }
+}
+function writeSave() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* 저장 못 해도 게임은 된다 */ }
+}
+const save = loadSave();
+
+// 화면 전환 때 글 · 버튼 · 대기 중인 동작을 다 멈춘다
+function stopTalking() {
+  clearInterval(typeTimer);
+  typing = null;
+  queue = [];
+  afterLines = null;
+  waitClick = null;
+  choicesEl.innerHTML = '';
+  sayEl.classList.remove('erased');
+  hint('');
+}
+
+function startScene(i) {
+  const sc = SCENES[i];
+  if (!sc) { showEnd(); return; }
+  stopTalking();
+  bookEl.classList.remove('title');
+  save.cur = i;
+  save.max = Math.max(save.max, i);
+  writeSave();
+  Object.assign(S, freshState(), { scene: i, sc, x: sc.startX });
   if (sc.setup) sc.setup();
   chapterEl.textContent = sc.chapter;
   sayEl.classList.remove('erased');
@@ -1921,7 +2039,9 @@ function badEnding() {
   hint('');
   S.eraseAt = performance.now();
   setTimeout(() => sayEl.classList.add('erased'), 300);
+  const scene = S.scene;
   setTimeout(() => {
+    if (S.scene !== scene || bookEl.classList.contains('title')) return;   // 그새 다른 화면으로 갔으면 안 띄운다
     const btn = document.createElement('button');
     btn.textContent = '이 장면 다시 읽기';
     btn.addEventListener('click', (ev) => { ev.stopPropagation(); startScene(S.scene); });
@@ -1930,20 +2050,91 @@ function badEnding() {
 }
 
 function showEnd() {
-  Object.assign(S, {
-    sc: { bg: 'intro' }, x: -99, target: null, actors: [], parts: [],
-    music: false, hum: false, study: false, eraseAt: null, hidden: true,
-    look: null, bg: null, flashAt: null, love: false, party: false, rain: false, morning: false, shine: false,
-    bell: false, gloom: false, shake: 0, fire: false, smoke: false, kidsIn: 0, milkPile: 0,
-    sign: false, cap: false, bookDone: false, feet: null, props: [],
-  });
+  stopTalking();
+  Object.assign(S, freshState(), { sc: { bg: 'intro' }, hidden: true, bookDone: true });   // 다 읽었으니 책이 채워져 있다
+  save.cur = null;     // 다 읽었으면 이어하기는 없고, 타임라인은 전부 열린다
+  save.max = SCENES.length - 1;
+  save.done = true;
+  writeSave();
   chapterEl.textContent = '';
-  S.bookDone = true;   // 다 읽었으니 책의 지워진 줄이 채워져 있다
   say(['- 끝 -'], () => {
-    hint('처음부터 ▶');
-    waitClick = () => fadeTo(() => startScene(0));
+    hint('처음 화면으로 ▶');
+    waitClick = () => fadeTo(showTitle);
   });
 }
+
+// ─────────────────────────────────────────────
+// 메인 화면: 새로하기 · 이어하기 · 타임라인
+// ─────────────────────────────────────────────
+const bookEl = document.getElementById('book');
+const timelineEl = document.getElementById('timeline');
+
+function menuButton(label, onClick, disabled = false) {
+  const btn = document.createElement('button');
+  btn.textContent = label;
+  btn.disabled = disabled;
+  btn.addEventListener('click', (ev) => { ev.stopPropagation(); if (!fading) onClick(); });
+  choicesEl.appendChild(btn);
+}
+
+function showTitle() {
+  stopTalking();
+  bookEl.classList.add('title');
+  timelineEl.classList.remove('on');
+  Object.assign(S, freshState(), {
+    sc: { bg: 'title' }, bookDone: !!save.done,
+    actors: [{ sprite: 'sunny', x: 104, feet: 80, dir: 'left' }],
+  });
+  chapterEl.textContent = '';
+  sayEl.textContent = "'외로워도 슬퍼도 나는 안 울어~'";
+  menuButton('새로하기', () => fadeTo(() => startScene(0)));
+  menuButton('이어하기', () => fadeTo(() => startScene(save.cur)), save.cur == null);
+  menuButton('타임라인', openTimeline);
+}
+
+// 장면 이름 '시기 · 장면' 을 시기별로 묶는다. 아직 안 간 장면은 ???
+function openTimeline() {
+  const list = document.getElementById('tlList');
+  list.innerHTML = '';
+  let row = null, era = null;
+  SCENES.forEach((sc, i) => {
+    const [head, name] = sc.chapter.includes(' · ') ? sc.chapter.split(' · ') : [sc.chapter, sc.chapter];
+    if (head !== era) {
+      era = head;
+      const h = document.createElement('div');
+      h.className = 'tl-era';
+      h.textContent = head;
+      list.appendChild(h);
+      row = document.createElement('div');
+      row.className = 'tl-row';
+      list.appendChild(row);
+    }
+    const btn = document.createElement('button');
+    const open = i <= save.max;
+    btn.textContent = open ? name : '???';
+    btn.disabled = !open;
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (fading) return;
+      fadeTo(() => { timelineEl.classList.remove('on'); startScene(i); });
+    });
+    row.appendChild(btn);
+  });
+  timelineEl.classList.add('on');
+  timelineEl.scrollTop = 0;
+}
+
+document.getElementById('tlClose').addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  timelineEl.classList.remove('on');
+});
+timelineEl.addEventListener('click', (ev) => ev.stopPropagation());
+
+// 게임 중 '처음 화면' — 진행은 이미 저장돼 있어서 이어하기로 돌아올 수 있다
+document.getElementById('home').addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  if (!fading) fadeTo(showTitle);
+});
 
 // ─────────────────────────────────────────────
 // 6. 움직임 · 그리기
@@ -2181,7 +2372,7 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
-startScene(0);
+showTitle();
 requestAnimationFrame(loop);
 </script>
 </body>
