@@ -293,6 +293,11 @@ Object.assign(LOOKS, {
   suitorB:   { h: '#2e2018', t: '#c6b5e0', p: '#6f84a8', m: '#c6b5e0' },
   son:       { t: '#7cc56b', p: '#5a6a8a' },
   daughter:  { t: '#f7b6c8', p: '#f27a9b' },
+  grandma:   { h: '#cfc9c4', t: '#b48aac', p: '#8a7a9a', m: '#b48aac' },  // 소녀의 어머니 (흰머리)
+  momA:      { h: '#2e2018', t: '#bfe3ff', p: '#7a8fd6' },
+  momB:      { h: '#7a4a2a', t: '#c6e88a', p: '#5a6a8a' },
+  sonAdult:  { h: '#2e2018', t: '#7cc56b', p: '#5a6a8a', m: '#7cc56b' },
+  daughterAdult: { h: '#3a2a22', t: '#f7b6c8', p: '#7a8fd6' },
 });
 
 const SPRITES = {
@@ -319,6 +324,11 @@ const SPRITES = {
   note: makeSprite(NOTE, { o: '#f27a9b' }),
   letter: makeSprite(LETTER, { o: '#5a8fd6' }),
   heart: makeSprite(HEART, { o: '#ff7a9b' }),
+  grandma: makeWalker(TEEN_TOP, LOOKS.grandma),
+  momA: makeWalker(ADULT_TOP, LOOKS.momA),
+  momB: makeWalker(ADULT_TOP, LOOKS.momB),
+  sonAdult: makeWalker(TEEN_TOP, LOOKS.sonAdult),
+  daughterAdult: makeWalker(ADULT_TOP, LOOKS.daughterAdult),
 };
 
 // ─────────────────────────────────────────────
@@ -488,10 +498,10 @@ function drawJars(x) {
 }
 
 // 학교 + 운동회 만국기
-function drawSchool() {
+function drawSchool(wall = '#fbf6ea', roof = '#d97a5a') {
   rect(9, 25, 92, 34, PALETTE.o);
-  rect(10, 26, 90, 33, '#fbf6ea');
-  rect(10, 26, 90, 4, '#d97a5a');
+  rect(10, 26, 90, 33, wall);
+  rect(10, 26, 90, 4, roof);
   for (let r = 0; r < 2; r++) for (let i = 0; i < 9; i++) {
     if (r === 1 && i === 4) continue;
     rect(14 + i * 10, 34 + r * 11, 6, 6, '#9cd3f5');
@@ -726,6 +736,127 @@ function drawParty(t) {
   ctx.globalAlpha = 1;
 }
 
+// 새로 산 아파트 (학구열 높은 00도시)
+function drawTowers() {
+  [[18, 8], [96, 4]].forEach(([x, top]) => {
+    rect(x - 1, top - 1, 46, 67 - top, PALETTE.o);
+    rect(x, top, 44, 66 - top, '#f4f1ec');
+    rect(x, top, 44, 3, '#9cc4ee');
+    for (let y = top + 6; y < 60; y += 6) for (let i = 0; i < 5; i++) rect(x + 3 + i * 8, y, 6, 3, (i + y) % 4 ? '#bfe0f5' : '#ffe6a0');
+  });
+}
+
+function drawHospital() {
+  const x = 108;
+  rect(x - 1, 29, 50, 37, PALETTE.o);
+  rect(x, 30, 48, 36, '#fbfbf5');
+  rect(x, 30, 48, 4, '#9cd3f5');
+  for (let i = 0; i < 4; i++) rect(x + 4 + i * 11, 38, 7, 6, '#bfe0f5');
+  rect(x + 20, 50, 10, 16, '#bfe0f5');
+  rect(x + 25, 50, 1, 16, PALETTE.o);
+  rect(x + 36, 47, 9, 9, '#ffffff');           // 빨간 십자
+  rect(x + 39, 48, 3, 7, '#ff6b6b');
+  rect(x + 37, 50, 7, 3, '#ff6b6b');
+}
+
+// 2층 세탁소 + 1층 피아노학원 + 옆 컨테이너 (아이들 공부방)
+function drawLaundry(t) {
+  const x = 72;
+  rect(x - 3, 21, 86, 3, '#c98aa8');
+  rect(x - 1, 24, 82, 42, PALETTE.o);
+  rect(x, 25, 80, 19, '#fff6ea');
+  rect(x, 45, 80, 21, '#e8f0ff');
+  rect(x + 4, 27, 22, 6, '#ffffff');           // 세탁소 간판 (옷걸이)
+  rect(x + 14, 28, 2, 1, PALETTE.o);
+  rect(x + 11, 29, 8, 1, PALETTE.o);
+  rect(x + 9, 30, 12, 1, PALETTE.o);
+  rect(x + 30, 27, 46, 15, PALETTE.o);         // 창: 걸린 옷들
+  rect(x + 31, 28, 44, 13, '#cdeeff');
+  rect(x + 31, 30, 44, 1, '#8a93a6');
+  ['#ff9e7a', '#7fb2e0', '#c6e88a', '#f7b6c8', '#ffd35a'].forEach((c, i) => rect(x + 34 + i * 8, 31, 6, 8, c));
+  rect(x + 4, 48, 30, 6, PALETTE.o);           // 피아노 건반 간판
+  rect(x + 5, 49, 28, 4, '#ffffff');
+  for (let i = 0; i < 7; i++) rect(x + 7 + i * 4, 49, 2, 2, PALETTE.o);
+  rect(x + 40, 48, 34, 12, PALETTE.o);
+  rect(x + 41, 49, 32, 10, S.fire ? (Math.floor(t / 6) % 2 ? '#ffb347' : '#ff7a5a') : '#bfe0f5');
+  rect(x + 8, 56, 10, 10, '#a8714a');
+  rect(19, 45, 40, 21, PALETTE.o);             // 컨테이너
+  rect(20, 46, 38, 20, '#8fb0cf');
+  for (let i = 0; i < 9; i++) rect(22 + i * 4, 46, 1, 20, '#7d9cbb');
+  rect(28, 50, 18, 9, PALETTE.o);
+  rect(29, 51, 16, 7, '#ffe6a0');
+  if (S.kidsIn >= 1) rect(39, 54, 4, 4, '#3a2a22');
+  if (S.kidsIn >= 2) rect(32, 54, 4, 4, PALETTE.h);
+}
+
+// 불 · 연기 (피아노학원 창에서)
+function drawFire(t) {
+  const x = 112;
+  if (S.fire) {
+    for (let i = 0; i < 6; i++) {
+      const h = 4 + ((Math.floor(t / 5) + i * 3) % 5);
+      rect(x + 2 + i * 5, 48 - h, 3, h, i % 2 ? '#ffb347' : '#ff7a5a');
+      rect(x + 3 + i * 5, 48 - h + 1, 1, h - 2, '#ffe08a');
+    }
+  }
+  for (let i = 0; i < 4; i++) {
+    const age = (t / 2 + i * 30) % 120;
+    disc(Math.round(x + 16 + Math.sin(age / 12) * 4), Math.round(42 - age * 0.3), 2 + Math.floor(age / 40), '#d8d4d8');
+  }
+}
+
+// 좁은 집 (방 한 칸) 안
+function drawRoom() {
+  rect(0, 0, W, 62, '#f6e3cf');
+  for (let y = 4; y < 60; y += 8) for (let x = (y % 16 ? 4 : 8); x < W; x += 8) rect(x, y, 1, 1, '#ead0b6');
+  rect(0, 62, W, H - 62, '#e2b984');            // 장판
+  for (let x = 0; x < W; x += 20) rect(x, 62, 1, H - 62, '#d4a873');
+  rect(0, 61, W, 1, PALETTE.o);
+  rect(99, 13, 42, 28, PALETTE.o);              // 창 (해 질 녘)
+  rect(100, 14, 40, 16, '#c39dc4');
+  rect(100, 30, 40, 10, '#f0b4ae');
+  rect(119, 14, 2, 26, PALETTE.o);
+  rect(16, 44, 24, 18, PALETTE.o);              // TV
+  rect(17, 45, 22, 14, '#8fb0cf');
+  rect(20, 60, 16, 2, '#6b5a4a');
+  [['#ff9eb5', 0], ['#9cd3f5', 4], ['#ffd35a', 8]].forEach(([c, d]) => {   // 개켜 둔 이불
+    rect(48, 58 - d, 22, 4, PALETTE.o);
+    rect(49, 59 - d, 20, 2, c);
+  });
+}
+
+// 다니던 중개사무소(왼쪽) + 새로 산 상가(오른쪽) → sign 이면 '썬 공인중개사 사무소'
+function drawOffices(sign) {
+  rect(9, 29, 62, 37, PALETTE.o);
+  rect(10, 30, 60, 36, '#f5ead8');
+  rect(10, 30, 60, 6, '#7fb2e0');
+  rect(14, 40, 36, 20, PALETTE.o);
+  rect(15, 41, 34, 18, '#e8f6ff');
+  for (let r = 0; r < 3; r++) for (let i = 0; i < 4; i++) rect(17 + i * 8, 43 + r * 5, 6, 4, '#ffffff');   // 매물 종이
+  rect(54, 44, 12, 22, '#a8714a');
+  rect(91, 29, 62, 37, PALETTE.o);
+  rect(92, 30, 60, 36, '#fdf3e4');
+  rect(92, 30, 60, 8, sign ? '#ffb347' : '#d8cbb5');
+  if (sign) {                                    // 해님(썬) 간판
+    disc(100, 34, 3, '#fff3b0');
+    rect(106, 33, 40, 2, '#ffffff');
+  }
+  rect(96, 42, 36, 18, PALETTE.o);
+  rect(97, 43, 34, 16, sign ? '#e8f6ff' : '#e9e4da');
+  if (sign) for (let r = 0; r < 3; r++) for (let i = 0; i < 4; i++) rect(99 + i * 8, 45 + r * 5, 6, 4, '#ffffff');
+  rect(136, 44, 12, 22, sign ? '#ffb347' : '#b9b2a4');
+}
+
+// 쌓여 가는 우유 재고
+function drawMilkPile(n) {
+  for (let i = 0; i < n; i++) {
+    const cx = 96 + (i % 3) * 11, cy = 80 - Math.floor(i / 3) * 6;
+    rect(cx, cy, 10, 6, PALETTE.o);
+    rect(cx + 1, cy + 1, 8, 4, '#5a8fd6');
+    for (let k = 0; k < 3; k++) rect(cx + 2 + k * 3, cy - 1, 1, 2, '#ffffff');
+  }
+}
+
 // 책 — 인트로에서 써니가 주운 책. 줄 군데군데가 비어 있다 (지워진 곳)
 function drawBook(x, y) {
   rect(x, y, 40, 22, PALETTE.o);
@@ -735,8 +866,9 @@ function drawBook(x, y) {
   rect(x + 19, y + 2, 2, 18, '#e9d6b0');
   const lines = [[12, 1], [9, 0], [13, 1], [6, 0], [12, 1], [10, 1]];
   lines.forEach(([len, erased], i) => {
-    rect(x + 5, y + 4 + i * 2.5, len, 1, erased ? '#e8dccb' : '#b8a48c');
-    rect(x + 23, y + 4 + i * 2.5, 14 - len % 5, 1, i % 3 === 1 ? '#e8dccb' : '#b8a48c');
+    // 엔딩에서 책을 다 완성하면(bookDone) 지워진 줄이 채워진다
+    rect(x + 5, y + 4 + i * 2.5, len, 1, erased && !S.bookDone ? '#e8dccb' : '#b8a48c');
+    rect(x + 23, y + 4 + i * 2.5, 14 - len % 5, 1, i % 3 === 1 && !S.bookDone ? '#e8dccb' : '#b8a48c');
   });
 }
 
@@ -835,6 +967,46 @@ const BG = {
     drawPath(era);
     drawApt(S.morning ? 'morning' : 'dawn');
     drawLamp(!S.morning);
+  },
+  kinder(t) {
+    drawSky(ERA.summer, t);
+    drawSchool('#fff4d6', '#ff9eb5');
+    drawBunting(t);
+    drawTrack();
+  },
+  tower(t) {
+    drawSky(ERA.summer, t);
+    drawGround('#e8dccb');
+    drawPath(ERA.summer);
+    drawTowers();
+  },
+  street(t) {
+    drawSky(ERA.sunset, t);
+    drawGround('#ead2c2');
+    drawPath(ERA.sunset);
+    drawHospital();
+  },
+  laundry(t) {
+    drawSky(ERA.summer, t);
+    drawGround('#e8dccb');
+    drawPath(ERA.summer);
+    drawLaundry(t);
+    if (S.fire || S.smoke) drawFire(t);
+  },
+  room() {
+    drawRoom();
+  },
+  office(t) {
+    drawSky(ERA.summer, t);
+    drawGround('#e8dccb');
+    drawPath(ERA.summer);
+    drawOffices(S.sign);
+  },
+  ending(t) {
+    drawSky(ERA.morning, t);
+    drawGround('#ead2c2');
+    drawPath(ERA.morning);
+    drawOffices(true);
   },
 };
 
@@ -1236,6 +1408,353 @@ const SCENES = [
       ] },
     ],
   },
+  {
+    chapter: '육아 · 복숭아',
+    bg: 'apt',
+    actor: 'adult',
+    startX: 76,
+    intro: [
+      { text: "'띵동띵동'", on: () => { S.bell = true; } },
+      '응 누구지?? 찾아올 사람이 없는데??',
+    ],
+    eventX: 36,
+    event: [
+      '요즘 도둑이 많이 늘어서\n문단속을 철저하게 해야한댔어!',
+    ],
+    choices: [
+      { label: '문을 열어본다', ok: true, lines: [
+        { text: '헉 엄마잖아!?', on: () => {
+          S.bell = false;
+          S.actors.push({ sprite: 'grandma', x: 14, feet: 86, dir: 'right', bundle: true });
+        } },
+        '소녀의 어머니는 타지생활을 하는 소녀가 보고싶어서\n소녀가 좋아하는 복숭아를 한보따리 들고\n소녀의 집으로 찾아왔대',
+        '그런데 소녀의 어머니는 나이가 많으셔서\n오시는데 너무 힘들었나봐.',
+        "'들고오는데 너무 무거워서 버려버리고 싶었어'",
+        { text: '소녀는 너무너무 슬프면서 고마워서 엉엉 울었대', on: () => { S.tear = true; S.love = true; } },
+      ] },
+      { label: '안열어준다', ok: false, lines: [
+        // (써니등장)
+        { text: '그래도 문은 열어봐도 괜찮지 않을까?? 하하', on: () => {
+          S.bell = false;
+          S.actors.push({ sprite: 'sunny', x: 170, feet: 86, target: 70, speed: 1 });
+        } },
+        '배드엔딩...',
+      ] },
+    ],
+  },
+  {
+    chapter: '육아 · 엄마 달리기',
+    bg: 'kinder',
+    actor: 'adult',
+    startX: -16,
+    setup() {
+      S.actors.push(
+        { sprite: 'momB', x: RACE.start - 52, feet: 73 },
+        { sprite: 'momA', x: RACE.start - 34, feet: 80 },
+        { sprite: 'daughter', x: 146, feet: 66, dir: 'left' },
+      );
+    },
+    intro: [
+      '시간이 지나고 어느덧\n둘째딸의 유치원에서 운동회를 한다는데',
+      '엄마 달리기 라는 종목이 있네??',
+    ],
+    eventX: RACE.start - 16,
+    event: [
+      '갑자기 예전에 열심히 달렸던 기억이 생각나는데!?',
+    ],
+    choices: [
+      { label: '참가한다', ok: true, lines: [
+        '딸! 엄마가 상품 타올게!!',
+        { text: '소녀는 자신있게 달리기 줄에 섰고 1등을 했대!', on: () => {
+          walkTo(RACE.finish + 4, null, 1.5);
+          S.actors[0].target = RACE.finish - 24; S.actors[0].speed = 1.1;
+          S.actors[1].target = RACE.finish - 14; S.actors[1].speed = 1.25;
+          const scene = S.scene;
+          setTimeout(() => { if (S.scene === scene) burst(50); }, 1300);   // 결승선에 닿을 즈음
+        } },
+        { text: '딸아이가 상품을 들고 기뻐하는 모습을 보는데\n소녀가 더 기쁜 마음이 들었대', on: () => { S.actors[2].heart = true; } },
+        "'나도 아직 할수있구나!'",
+      ] },
+      { label: '에이..못하겠어', ok: false, lines: [
+        { text: "'어렸을 때 1등한거지 지금은 못하지...'", on: () => walkTo(-24, null, 0.5) },
+        { text: '그렇지만 소녀의 마음속에서는\n뛰고싶은 마음이 가득이었대', on: () => {
+          S.actors[0].target = RACE.finish + 30; S.actors[0].speed = 1.2;
+          S.actors[1].target = RACE.finish + 40; S.actors[1].speed = 1.3;
+        } },
+        '배드엔딩...',
+      ] },
+    ],
+  },
+  {
+    chapter: '육아 · 투자 실패',
+    bg: 'tower',
+    actor: 'adult',
+    startX: 40,
+    setup() {
+      S.actors.push(
+        { sprite: 'boy', x: 22, feet: 84, follow: -18 },
+        { sprite: 'son', x: 58, feet: 86, follow: 18 },
+        { sprite: 'daughter', x: 70, feet: 86, follow: 30 },
+      );
+    },
+    intro: [
+      '소년과 소녀는 자라나는 아이들을 위해서 열심히 살았어.',
+      { text: '학구열이 매우 높다는 00도시에서\n아파트도 사고 저축도 열심히 하고!', on: () => { S.love = true; } },
+      { text: '소녀는 내친김에 새벽일도 그만두고\n공인중개사 자격증 공부를 시작했대.', on: () => { S.love = false; S.study = true; } },
+      { text: '앞으로도 쭉 이렇게 행복하게 살 수 있다고 생각했는데', on: () => { S.study = false; } },
+    ],
+    eventX: 64,
+    event: [
+      // (투자실패) — 글로 쓰지 않고 화면이 쿵 흔들리고 흐려지는 걸로 보여 준다
+      { text: '갑자기 형편이 어려워지게 되었대.', on: () => { S.shake = 40; S.gloom = true; } },
+    ],
+    choices: [
+      { label: '엉엉 망했어 이제 다 끝이야!', ok: false, lines: [
+        { text: '그치만 엉엉 우는건,\n소녀의 캔디캔디 노래랑 다른 행동이었어.', on: () => { S.tear = true; } },
+        '배드엔딩...',
+      ] },
+      { label: '그래도 할수있는걸 해봐야지', ok: true, lines: [
+        { text: "'다시 열심히 하자! 캔디캔디처럼!'", on: () => { S.gloom = false; S.hum = true; } },
+        '소년과 소녀는 살던 집을 팔고\n방이 하나만 있는 작은 아파트로 이사를 갔대',
+      ] },
+    ],
+  },
+  {
+    chapter: '아이들 학창 시절 · 다시 새벽일',
+    bg: 'dawn',
+    actor: 'adultDawn',
+    startX: -16,
+    intro: [
+      '소녀는 다시 돈을 벌기 위해서 이것저것 알아봤어',
+      { text: '근데 비올 때 신문배달하기 어려운데...', on: () => { S.rain = true; } },
+      { text: '새벽에 나가는것도 사실 너무 무서워..!', on: () => { S.rain = false; } },
+    ],
+    eventX: 40,
+    event: [],
+    choices: [
+      { label: '일단 아이 키우는데 집중하자', ok: false, lines: [
+        '이제 아이들도 초등학생이니까 교육에 집중하자!',
+        '하지만 점점 생활하는게 어려워져서\n소녀는 너무 슬펐대.',
+        '배드엔딩...',
+      ] },
+      { label: '그래도 해야지!', ok: true, lines: [
+        { text: '소녀는 새벽이 무서웠지만\n용기를 내서 다시 새벽일을 시작했어.', on: () => { S.carry = 'paper'; walkTo(70, null, 0.5); } },
+        { text: '신문이 비에 젖어서 힘들면\n안젖는 우유배달을 하자!!', on: () => { S.carry = 'milk'; } },
+        '그런데, 우유배달은 문제가 있었어.',
+        { text: '고객들이 주문해놓고 취소하는 경우가 많아서\n재고처리가 너무 힘들었어.', on: () => { S.milkPile = 3; } },
+        { text: '미리 주문해놓은 이 우유들을 어떻게 처리하지..?', on: () => { S.milkPile = 7; } },
+        { text: '그리고 우유..너무 무거워!', on: () => { S.shake = 12; } },
+        { text: '소녀는 결국 신문배달을 다시 하기로 했어.', on: () => { S.carry = 'paper'; } },
+      ] },
+    ],
+  },
+  {
+    chapter: '아이들 학창 시절 · 물배달',
+    bg: 'street',
+    actor: 'adult',
+    startX: -16,
+    setup() {
+      S.actors.push({ sprite: 'boy', x: 40, feet: 84, target: 70, speed: 0.5, jug: true });
+    },
+    intro: [
+      '소년과 소녀는 돈을 더 많이 벌기 위해서\n그리고 아이들을 더 잘 키우기 위해서 큰 결심을 했대',
+      '소년은 다니던 직장을 그만두고 물배달을 시작했어.',
+      { text: "'으악!'", on: () => {
+        const boy = S.actors[0];
+        boy.target = null; boy.jug = false; boy.dizzy = true;
+        S.props.push({ kind: 'jug', x: boy.x + 14 });
+        S.shake = 20;
+      } },
+      '소년이 물배달을 하다가 머리가 찢어져버렸어!',
+    ],
+    eventX: 44,
+    event: [],
+    choices: [
+      { label: '어떡해어떡해!!', ok: false, lines: [
+        { text: '소녀는 이 상황이 너무 힘들었대.', on: () => { S.tear = true; } },
+        '안좋은 일들이 계속해서 벌어져서 엉엉 울었대.',
+        '배드엔딩...',
+      ] },
+      { label: '얼른 병원에 가자', ok: true, lines: [
+        { text: '소녀는 놀란 마음을 진정시키며\n소년과 함께 병원에 갔대.', on: () => {
+          S.actors[0].follow = 18;
+          walkTo(96, null, 0.6);
+        } },
+        '머리가 너무 크게 찢어져서 꿰매야된다는거야',
+        '소녀는 너무 슬펐지만\n소년이 더 힘들걸 아니까 꾹 참았구',
+        { text: '소년도 씩씩하게 치료를 받았대.', on: () => { S.actors[0].dizzy = false; S.actors[0].bandage = true; } },
+      ] },
+    ],
+  },
+  {
+    chapter: '아이들 학창 시절 · 세탁소',
+    bg: 'laundry',
+    actor: 'adult',
+    startX: 110,
+    setup() { S.kidsIn = 2; },
+    intro: [
+      '소년과 소녀는 세탁소를 차리기로 했어.',
+      '손재주가 좋았던 소녀는 수선,\n힘이 센 소년은 세탁을 맡아서 하기로 했지.',
+      '아이들은 초등학교가 끝나면\n세탁소 옆에 있는 컨테이너에서 열심히 공부를 했어.',
+    ],
+    eventX: 66,
+    event: [
+      { text: "'엄마 나 이거 사고싶어'", on: () => {
+        S.kidsIn = 1;
+        S.actors.push({ sprite: 'daughter', x: 40, feet: 86, target: 50, speed: 0.5 });
+      } },
+      '어느날 딸이 영어공부기기를 사달라고 했대',
+      '공부를 위해서라면 뭐든지 해주지!',
+      '앗 근데 가격이... 30만원?! 너무 비싼데...',
+    ],
+    choices: [
+      { label: '딸 미안해 너무 비싸', ok: false, lines: [
+        '딸에게는 너무 미안하지만...\n30만원은 너무 비쌌어.',
+        '딸이 원하는걸 해주지 못해서\n소녀는 너무 슬펐대',
+        '배드엔딩...',
+      ] },
+      { label: '딸의 공부를 위해서라면!', ok: true, lines: [
+        { text: '소녀는 큰 맘을 먹고 딸을 위해 기기를 사줬어!', on: () => { S.actors[0].device = true; S.actors[0].heart = true; } },
+        { text: '딸이 열심히 공부하겠지??', on: () => { S.actors[0].heart = false; } },
+        "'안하는것 같은건 착각일까?'",
+      ] },
+    ],
+  },
+  {
+    chapter: '아이들 학창 시절 · 좁은 집',
+    bg: 'room',
+    actor: 'adult',
+    startX: 56,
+    setup() {
+      S.actors.push({ sprite: 'daughter', x: 96, feet: 86, dir: 'left' });
+    },
+    intro: [
+      "'엄마 우리집은 왜이렇게 좁아?\n더 넓은데로 이사가면 안돼?'",
+      '어느날 딸이 소녀에게 물어봤대',
+      '우리는 지금 열심히 살고있는데\n이게 도대체 무슨 소리지!?',
+    ],
+    choices: [
+      { label: '딸을 혼내야겠어', ok: false, lines: [
+        { text: '지금 엄마아빠가 이렇게 열심히 살고있는데\n그게 무슨소리니!', on: () => { S.shake = 10; } },
+        { text: '소녀는 딸을 혼내면서도 너무 속상했대', on: () => { S.tear = true; } },
+        '배드엔딩...',
+      ] },
+      { label: '딸에게 설명해줘야겠어', ok: true, lines: [
+        { text: "'딸 그거는 도망가는거야.'", on: () => walkTo(76, null, 0.4) },
+        "'있는 자리에서 열심히 노력해야하는거야.'",
+        { text: "'그렇구나...'", on: () => { S.love = true; } },
+      ] },
+    ],
+  },
+  {
+    chapter: '아이들 학창 시절 · 불',
+    bg: 'laundry',
+    actor: 'adult',
+    startX: 64,
+    setup() { S.kidsIn = 2; },
+    intro: [
+      { text: '어느날 소녀의 세탁소 밑의 피아노학원에서 불이났어!', on: () => { S.fire = true; S.shake = 30; } },
+      { text: '다행히 불은 금방 꺼져서\n세탁소의 옷들에 피해는 없었지만', on: () => { S.fire = false; S.smoke = true; } },
+      '소녀는 처음으로 두려워졌어.',
+      "'이러다 큰일날수도 있겠는데??'",
+      { text: '소녀는 다시 또 도전했어.', on: () => { S.smoke = false; } },
+    ],
+    choices: [
+      { label: '공인중개사 자격증!', ok: true, lines: [
+        '소년도 세탁소를 그만두고 다시 회사로 돌아갔어.',
+        { text: '소녀는 외벌이하는 소년에게 고마워하면서\n아이들을 위해 열심히 공인중개사 공부를 했고', on: () => { S.study = true; } },
+        { text: '2년만에 합격을 했어!', on: () => { S.study = false; burst(60); } },
+      ] },
+    ],
+  },
+  {
+    chapter: '아이들 성인 · 썬 공인중개사',
+    bg: 'office',
+    actor: 'adult',
+    startX: -16,
+    intro: [
+      '소녀는 공인중개사무소에 들어가서 중개를 시작했어.',
+      '처음하는 일이라 힘들었지만\n아이들을 생각하니까 힘이 막 나는걸??',
+      { text: '아이들도 잘 자라줘서\n첫째와 둘째 모두 경기권 상위 대학교에 입학했대', on: () => burst(40) },
+      '근데 문득...\n소녀는 깨달았대.',
+    ],
+    eventX: 72,
+    event: [
+      "'공인중개사무소에서 내가 버는 돈보다\n내 월급이 더 적은것 같은데...?'",
+    ],
+    choices: [
+      { label: '주는만큼만 일하지뭐', ok: false, lines: [
+        '애들도 다 컸는데 이제 쉬엄쉬엄 해야겠다~',
+        '그치만 항상 열심히 살기로 했던 소녀는\n마음속으로 계속 찝찝함이 남았대',
+        '배드엔딩...',
+      ] },
+      { label: '내가 공인중개사를 차리겠어!', ok: true, lines: [
+        "'내가 번만큼 받아갈거야!'",
+        { text: '소녀는 그동안 모은 돈과,\n살고있던 아파트를 팔아버리고 상가 하나를 샀어.', on: () => walkTo(104, null, 0.6) },
+        { text: "'썬 공인중개사 사무소'\n소녀의 이름을 딴, 소녀만의 사무소", on: () => { S.sign = true; burst(60); } },
+      ] },
+    ],
+  },
+  {
+    // 선택지 없이 지난 장면들을 한 번씩 돌아본다
+    chapter: '아이들 성인 · 돌아보면',
+    bg: 'office',
+    actor: 'adult',
+    startX: 64,
+    intro: [
+      { text: '지게를 지고 다니던 소녀는 ...', on: () => { setBg('jige'); S.look = 'girl'; S.carry = 'jige'; } },
+      { text: '공장에서 일하던 소녀는 ...', on: () => { setBg('factory'); S.look = 'worker'; S.carry = null; } },
+      { text: '신문배달을 하던 소녀는 ...', on: () => { setBg('dawn'); S.look = 'adultDawn'; S.carry = 'paper'; } },
+      { text: '세탁소에서 일하던 소녀는 ...', on: () => { setBg('laundry'); S.look = null; S.carry = null; } },
+      { text: '결국 소녀만의 사무소를 차리게 되었대!', on: () => { setBg('office'); S.sign = true; burst(70); } },
+    ],
+  },
+  {
+    chapter: '엔딩',
+    bg: 'ending',
+    actor: 'adult',
+    startX: 20,
+    intro: [
+      { text: '사무소를 차린 소녀는 그 뒤로도 멈추지 않았어.', on: () => walkTo(40) },
+      { text: '대학교를 못간 소녀는 사이버대학교에 입학해서\n사회복지 학사학위를 땄어', on: () => { S.cap = true; burst(50); } },
+      { text: '사무실을 운영하면서 틈틈이 도시락 배달 봉사도 했어.', on: () => { S.cap = false; S.carry = 'lunch'; walkTo(64); } },
+      { text: '딸도 한번 도와주러왔었는데\n힘들다고 도망갔다지 뭐야?', on: () => {
+        const d = { sprite: 'daughterAdult', x: 170, feet: 84, target: 86, speed: 1.2 };
+        d.arrive = () => setTimeout(() => { d.target = 190; d.speed = 1.8; }, 700);
+        S.actors.push(d);
+      } },
+      { text: '열심히 했더니 성남시장 표창장도 받았어!', on: () => { S.carry = 'cert'; burst(50); } },
+      { text: '소녀는 취미로 시도 열심히 썼는데 글쎄,\n시인으로 등재도 된거있지??', on: () => { S.carry = null; S.study = true; } },
+      { text: '명동에서 소년과 아이들과 함께 시 낭독을 하고\n시인으로 임명을 받았을 때는 너무너무 행복했대', on: () => {
+        S.study = false;
+        S.love = true;
+        S.actors = [
+          { sprite: 'boy', x: 44, feet: 84, dir: 'right' },
+          { sprite: 'sonAdult', x: 86, feet: 84, dir: 'left' },
+          { sprite: 'daughterAdult', x: 102, feet: 84, dir: 'left' },
+        ];
+      } },
+      { text: '배우는걸 멈추지 않은 소녀는\n유년기에 밖에서 일하며 따라 부르던 노래', on: () => { S.love = false; S.hum = true; } },
+      "'외로워도 슬퍼도 나는 안 울어\n참고참고 또 참지 울긴 왜울어'",
+      '캔디캔디는 결국 소녀의 평생의 태도가 되었던 거야.',
+      // 처음 그 책 앞으로 돌아온다 — 써니가 말한다
+      { text: '책은 여기까지야!', on: () => {
+        setBg('intro');
+        S.actors = [];
+        S.hum = false;
+        S.look = 'sunny';
+        S.target = null;                       // 앞에서 걷던 게 남아 있으면 책 위로 걸어간다
+        S.x = 104;
+        S.feet = 70;
+        S.dir = 'right';
+      } },
+      { text: '책을 완성시켜줘서 고마워!', on: () => { S.bookDone = true; burst(40); } },
+      '써니가 앞으로도 계속 잘 살 수 있게 응원해줘!!',
+      '응? 왜 써니냐구?',
+      // 써니 = 소녀: 번쩍 하고 어른 소녀 모습이 된다
+      { text: '왜긴, 써니가 바로 소녀니까 그러지!', on: () => { setBg('intro'); S.look = 'adult'; S.love = true; burst(60); } },
+    ],
+  },
 ];
 
 // ─────────────────────────────────────────────
@@ -1341,6 +1860,8 @@ function startScene(i) {
     working: false, carry: null, music: false, hum: false, study: false, tear: false, clear: false,
     pour: 0, hidden: false, sparkle: false, eraseAt: null, actors: [], parts: [],
     look: null, bg: null, flashAt: null, love: false, party: false, rain: false, morning: false, shine: false,
+    bell: false, gloom: false, shake: 0, fire: false, smoke: false, kidsIn: 0, milkPile: 0,
+    sign: false, cap: false, bookDone: false, feet: null, props: [],
   });
   if (sc.setup) sc.setup();
   chapterEl.textContent = sc.chapter;
@@ -1361,7 +1882,8 @@ function setBg(name) {
 }
 
 function runEvent() {
-  say(S.sc.event, showChoices);
+  // 선택지 없는 장면(돌아보기 · 엔딩)은 글이 끝나면 바로 다음 장면으로
+  say(S.sc.event || [], S.sc.choices ? showChoices : sceneClear);
 }
 
 function showChoices() {
@@ -1389,7 +1911,7 @@ function sceneClear() {
   hint('다음 장면 ▶');
   waitClick = () => {
     const next = () => fadeTo(() => startScene(S.scene + 1));
-    if (S.sc.bg === 'intro') { next(); return; }
+    if ((S.bg || S.sc.bg) === 'intro') { next(); return; }
     walkTo(W + 4, next, Math.max(S.speed, 0.6));   // 오른쪽으로 걸어 나간 뒤 하얘진다
   };
 }
@@ -1412,9 +1934,12 @@ function showEnd() {
     sc: { bg: 'intro' }, x: -99, target: null, actors: [], parts: [],
     music: false, hum: false, study: false, eraseAt: null, hidden: true,
     look: null, bg: null, flashAt: null, love: false, party: false, rain: false, morning: false, shine: false,
+    bell: false, gloom: false, shake: 0, fire: false, smoke: false, kidsIn: 0, milkPile: 0,
+    sign: false, cap: false, bookDone: false, feet: null, props: [],
   });
   chapterEl.textContent = '';
-  say(['지금은 여기까지예요.\n뒷이야기는 아직 쓰는 중이에요.'], () => {
+  S.bookDone = true;   // 다 읽었으니 책의 지워진 줄이 채워져 있다
+  say(['- 끝 -'], () => {
     hint('처음부터 ▶');
     waitClick = () => fadeTo(() => startScene(0));
   });
@@ -1463,7 +1988,8 @@ function update(t) {
     else { a.target = null; a.dir = S.dir; }
   });
   S.actors.forEach(moveToward);
-  const headY = S.sc.actor ? FEET - girlSprite().stand.height - 2 : 0;
+  const headY = S.sc.actor ? (S.feet || S.sc.feet || FEET) - girlSprite().stand.height - 2 : 0;
+  if (S.shake > 0) S.shake--;
   // 음표: 창문에서, 흥얼거릴 때는 소녀 머리에서 / 공부할 때는 글자
   if (S.music && S.sc.noteFrom && t % 40 === 0) S.parts.push({ kind: 'note', x: S.sc.noteFrom.x, y: S.sc.noteFrom.y, life: 120 });
   if (S.hum && !S.hidden && t % 55 === 0) S.parts.push({ kind: 'note', x: S.x + 12, y: headY, life: 120 });
@@ -1495,6 +2021,28 @@ function drawActor(a, t) {
     rect(x + 4, y - 2, 8, 4, '#2e2622');
     rect(x + 6, y + 12, 4, 3, '#f4f1ea');
   }
+  if (a.bundle) {   // 복숭아 보따리
+    rect(x + 12, y + 14, 8, 7, PALETTE.o);
+    rect(x + 13, y + 15, 6, 5, '#f7a8c0');
+    rect(x + 15, y + 13, 2, 2, '#f7a8c0');
+    rect(x + 14, y + 16, 2, 2, '#ffb38a');
+  }
+  if (a.jug) {      // 어깨에 멘 생수통
+    rect(x + 1, y - 6, 8, 10, PALETTE.o);
+    rect(x + 2, y - 5, 6, 8, '#9cd3f5');
+    rect(x + 4, y - 7, 2, 2, '#5a8fd6');
+  }
+  if (a.bandage) rect(x + 2, y + 4, 12, 2, '#ffffff');
+  if (a.dizzy) {    // 머리 위 빙글빙글 별
+    const k = Math.floor(t / 8) % 4;
+    const pts = [[0, -3], [14, -1], [12, -6], [2, -6]];
+    rect(x + pts[k][0], y + pts[k][1], 2, 2, '#ffd35a');
+    rect(x + pts[(k + 2) % 4][0], y + pts[(k + 2) % 4][1], 2, 2, '#ffd35a');
+  }
+  if (a.device) {   // 영어공부기기
+    rect(x + 7, a.feet - 6, 5, 4, PALETTE.o);
+    rect(x + 8, a.feet - 5, 3, 2, '#ffd35a');
+  }
 }
 
 function drawGirl(t) {
@@ -1503,7 +2051,7 @@ function drawGirl(t) {
   const img = walking ? frames.walk[Math.floor(S.step / (S.speed > 1 ? 5 : 10)) % 2] : frames.stand;
   const bob = S.working && Math.floor(t / 20) % 2 ? 1 : 0;   // 호미질
   const x = Math.round(S.x);
-  const y = (S.sc.feet || FEET) - (img.height - 1) + bob;
+  const y = (S.feet || S.sc.feet || FEET) - (img.height - 1) + bob;
   const hand = y + img.height - 9;
   const front = S.dir === 'left' ? -1 : 1;
   const hx = S.dir === 'left' ? x + 2 : x + 13;
@@ -1530,6 +2078,26 @@ function drawGirl(t) {
     rect(hx - 3, hand - 2, 7, 6, PALETTE.o);
     rect(hx - 2, hand - 1, 5, 4, '#f4f1ea');
     rect(hx - 2, hand, 5, 1, '#b8b4a8');
+  }
+  if (S.carry === 'milk') {                      // 우유 상자
+    rect(hx - 4, hand - 3, 9, 7, PALETTE.o);
+    rect(hx - 3, hand - 2, 7, 5, '#5a8fd6');
+    for (let i = 0; i < 3; i++) rect(hx - 2 + i * 2, hand - 4, 1, 2, '#ffffff');
+  }
+  if (S.carry === 'lunch') {                     // 도시락 (보자기)
+    rect(hx - 2, hand - 1, 6, 5, PALETTE.o);
+    rect(hx - 1, hand, 4, 3, '#ff7a7a');
+    rect(hx, hand - 2, 2, 1, '#ff7a7a');
+  }
+  if (S.carry === 'cert') {                      // 표창장
+    rect(hx - 2, hand - 4, 6, 8, PALETTE.o);
+    rect(hx - 1, hand - 3, 4, 6, '#fffaf0');
+    rect(hx, hand + 1, 2, 2, '#e6b422');
+  }
+  if (S.cap) {                                   // 학사모
+    rect(x + 1, y + 1, 14, 2, '#2e2622');
+    rect(x + 5, y - 1, 6, 2, '#2e2622');
+    rect(x + 13, y + 3, 1, 4, '#ffd35a');
   }
   if (S.carry === 'book') {
     rect(hx - 1, hand - 1, 4, 5, PALETTE.o);
@@ -1560,7 +2128,15 @@ function drawParts() {
 function draw(t, now) {
   const sc = S.sc;
   const bg = S.bg || sc.bg;
+  ctx.save();
+  if (S.shake > 0) ctx.translate(Math.round(Math.random() * 4 - 2), Math.round(Math.random() * 2 - 1));   // 쿵!
   BG[bg](t);
+  if (S.milkPile) drawMilkPile(S.milkPile);
+  S.props.forEach((pr) => {                      // 떨어진 생수통
+    rect(pr.x, 80, 11, 6, PALETTE.o);
+    rect(pr.x + 1, 81, 9, 4, '#9cd3f5');
+  });
+  if (S.bell) { drawSparkle(27, 52, t); drawSparkle(33, 46, t + 15); }   // 띵동
 
   S.actors.filter((a) => a.layer !== 'front').forEach((a) => drawActor(a, t));
   if (S.sparkle) drawSparkle(sc.eventX + 8, 52, t);
@@ -1574,11 +2150,18 @@ function draw(t, now) {
   drawParts();
   if (S.party) drawParty(t);
   if (S.rain) drawRain(t);
+  if (S.gloom) {                                 // 형편이 어려워짐: 화면이 흐려진다 (까맣게는 아니고)
+    ctx.globalAlpha = 0.35;
+    rect(0, 0, W, H, '#7a7f9a');
+    ctx.globalAlpha = 1;
+  }
   if (S.flashAt != null && now - S.flashAt < 500) {
     ctx.globalAlpha = 1 - (now - S.flashAt) / 500;
     rect(0, 0, W, H, '#ffffff');
     ctx.globalAlpha = 1;
   }
+
+  ctx.restore();
 
   if (S.eraseAt != null) {
     const p = Math.min(1, (now - S.eraseAt) / 1400) * 0.85;
