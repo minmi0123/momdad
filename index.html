@@ -112,6 +112,7 @@
   .title #titleText { display: block; }
   .title #home { visibility: hidden; }
   .title #say { text-align: center; color: var(--muted); }
+  .credits #say { text-align: center; font-size: 19px; }
   #choices button:disabled { opacity: .4; cursor: default; box-shadow: none; }
   /* 타임라인: 책 한 장을 덮는 목록 */
   #timeline {
@@ -1183,6 +1184,12 @@ const BG = {
     drawPath(ERA.dusk);
     drawCity(t);
   },
+  credits(t) {                                   // 엔딩 크레딧 — 아침 하늘 아래 썬 공인중개사 사무소
+    drawSky(ERA.morning, t);
+    drawGround('#ead2c2');
+    drawPath(ERA.morning);
+    drawOffices(true);
+  },
 };
 
 // 메인 화면 — 엔딩까지 본 적이 있으면 책이 다 채워져 있다
@@ -1861,8 +1868,26 @@ const SCENES = [
     intro: [
       '소녀는 공인중개사무소에 들어가서 중개를 시작했어.',
       '처음하는 일이라 힘들었지만\n아이들을 생각하니까 힘이 막 나는걸??',
-      { text: '아이들도 잘 자라줘서\n첫째와 둘째 모두 경기권 상위 대학교에 입학했대', on: () => burst(40) },
-      '근데 문득...\n소녀는 깨달았대.',
+      // 아이들 대학 입학 — 이 두 줄만 대학교 배경 (어른 오빠 · 어른 딸)
+      { text: '아이들도 잘 자라줘서\n첫째와 둘째 모두 경기권 상위 대학교에 입학했대', on: () => {
+        setBg('univ');
+        S.target = null;
+        S.x = 44;
+        S.dir = 'right';
+        S.actors = [
+          { sprite: 'sonAdult', x: 66, feet: 84, dir: 'left' },
+          { sprite: 'daughterAdult', x: 84, feet: 84, dir: 'left' },
+        ];
+        burst(40);
+      } },
+      { text: '어렸을 적부터 배움에 목말라있던 소녀는\n아이들이 열심히 공부해서 좋은 대학에 간게\n너무 기뻤대', on: () => { S.love = true; } },
+      { text: '근데 문득...\n소녀는 깨달았대.', on: () => {
+        setBg('office');                       // 다시 다니던 중개사무소 앞. 소녀는 왼쪽에서 걸어 들어온다
+        S.actors = [];
+        S.parts = [];
+        S.love = false;
+        S.x = -16;
+      } },
     ],
     eventX: 72,
     event: [
@@ -2117,7 +2142,7 @@ function startScene(i) {
   const sc = SCENES[i];
   if (!sc) { showEnd(); return; }
   stopTalking();
-  bookEl.classList.remove('title');
+  bookEl.classList.remove('title', 'credits');
   showAd(false);
   save.cur = i;
   save.max = Math.max(save.max, i);
@@ -2203,9 +2228,63 @@ function showEnd() {
   showAd(true);
   chapterEl.textContent = '';
   say(['- 끝 -'], () => {
+    hint('다음 ▶');
+    waitClick = () => fadeTo(startCredits);
+  });
+}
+
+// ─────────────────────────────────────────────
+// 엔딩 크레딧: 한 무리씩 왼쪽에서 걸어와 가운데 서고 → 문구 → 누르면 오른쪽으로 걸어 나간다
+// ─────────────────────────────────────────────
+const CREDITS = [
+  { cast: ['girl', 'teen', 'adult'], lines: ['써니, 자랑스러운 우리 엄마'] },   // 어린 · 학생 · 어른 소녀
+  { cast: ['boy'], lines: ['항상 멋진 우리 아빠'] },
+  { cast: ['son', 'sonAdult'], lines: ['그냥 오빠'] },                        // 어린 · 어른
+  { cast: ['daughter', 'daughterAdult'], lines: ['이 게임을 만든 킹 갓 제너럴 딸'] },
+  { cast: ['adult', 'boy', 'son', 'daughter'], hearts: true, lines: [
+    '플레이 해주셔서 감사합니다.',
+    { text: 'for sunny, for mom', on: () => burst(60) },
+  ] },
+];
+const CREDIT_WALK = 110;   // 화면 밖에서 가운데까지 걷는 거리
+
+// 무리를 가운데 줄 세우고, 그만큼 왼쪽 화면 밖에서 출발시킨다
+function placeCast(cast, hearts) {
+  const ws = cast.map((n) => SPRITES[n].right.stand.width);
+  const total = ws.reduce((a, b) => a + b, 0) + 6 * (cast.length - 1);
+  let x = Math.round(W / 2 - total / 2);
+  return cast.map((name, i) => {
+    const a = { sprite: name, x: x - CREDIT_WALK, target: x, speed: 0.8, feet: FEET, heart: false, hearts };
+    x += ws[i] + 6;
+    return a;
+  });
+}
+
+function startCredits() {
+  stopTalking();
+  bookEl.classList.remove('title');
+  bookEl.classList.add('credits');
+  Object.assign(S, freshState(), { sc: { bg: 'credits' }, hidden: true });
+  chapterEl.textContent = '';
+  playCredit(0);
+}
+
+function playCredit(k) {
+  const c = CREDITS[k];
+  if (!c) {
     hint('처음 화면으로 ▶');
     waitClick = () => fadeTo(showTitle);
-  });
+    return;
+  }
+  sayEl.textContent = '';
+  S.actors = placeCast(c.cast, !!c.hearts);
+  S.actors[0].arrive = () => {                   // 다 같이 같은 거리를 걸어서 첫 사람 도착 = 다 도착
+    S.actors.forEach((a) => { a.heart = a.hearts; });
+    say(c.lines, () => {
+      S.actors.forEach((a) => { a.heart = false; a.target = a.x + W - 20; });
+      S.actors[0].arrive = () => playCredit(k + 1);
+    });
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -2233,6 +2312,7 @@ function menuButton(label, onClick, disabled = false) {
 
 function showTitle() {
   stopTalking();
+  bookEl.classList.remove('credits');
   bookEl.classList.add('title');
   showAd(true);
   timelineEl.classList.remove('on');
