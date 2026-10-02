@@ -21,7 +21,8 @@
     color: var(--ink);
     font-family: "Galmuri11", "DungGeunMo", "Apple SD Gothic Neo", "Noto Sans KR", "맑은 고딕", "Malgun Gothic", system-ui, sans-serif;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
     padding: 16px;
     user-select: none;
     -webkit-user-select: none;
@@ -54,7 +55,43 @@
     padding: 1px 8px;
     cursor: pointer;
   }
+  /* 진행 막대 — 지나온 장면 수 / 전체 */
+  #progress {
+    height: 10px;
+    border: 2px solid var(--edge);
+    border-radius: 3px;
+    background: #fdf1d8;
+    overflow: hidden;
+  }
+  #progressFill {
+    width: 0;
+    height: 100%;
+    background: #ffc94d;
+    box-shadow: inset 0 -2px 0 #f2a93b;
+    transition: width .6s;
+  }
+  .title #progress { visibility: hidden; }
   #stage { position: relative; }
+  /* 광고 자리 — 책 카드 바깥 아래, 메인 화면과 '- 끝 -' 화면에서만 (이야기 중에는 없음)
+     비어 있으면 안 보인다. 광고 코드를 넣으면 그때부터 보이고, 높이를 미리 잡아 화면이 밀리지 않게 한다 */
+  .ad-slot {
+    display: none;
+    width: 100%;
+    max-width: 720px;
+    min-height: 100px;
+    margin-top: 24px;
+  }
+  .show-ad .ad-slot:not(:empty) { display: block; }
+  .ad-preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100px;
+    border: 2px dashed var(--muted);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 14px;
+  }
   /* 메인 화면 제목 — 캔버스 위 하늘 자리에 */
   #titleText {
     display: none;
@@ -175,6 +212,7 @@
     <span id="chapter"></span>
     <button id="home" type="button">처음 화면</button>
   </div>
+  <div id="progress" role="progressbar" aria-label="이야기 진행" aria-valuemin="0"><div id="progressFill"></div></div>
   <div id="stage">
     <canvas id="game" width="160" height="90"></canvas>
     <div id="titleText">써니의 책</div>
@@ -191,6 +229,8 @@
   </div>
   <div id="fade"></div>
 </main>
+<!-- 광고 자리: 여기에 애드센스 <ins class="adsbygoogle"> 코드를 넣는다. 주소에 ?adpreview 를 붙이면 회색 자리 상자가 보인다 -->
+<aside class="ad-slot" id="adSlot"></aside>
 <script>
 // ─────────────────────────────────────────────
 // 1. 도트 데이터 (팔레트 + 격자)
@@ -2054,6 +2094,13 @@ function writeSave() {
 }
 const save = loadSave();
 
+const progressEl = document.getElementById('progress');
+progressEl.setAttribute('aria-valuemax', SCENES.length);
+function setProgress(done) {
+  document.getElementById('progressFill').style.width = (done / SCENES.length * 100) + '%';
+  progressEl.setAttribute('aria-valuenow', done);
+}
+
 // 화면 전환 때 글 · 버튼 · 대기 중인 동작을 다 멈춘다
 function stopTalking() {
   clearInterval(typeTimer);
@@ -2071,9 +2118,11 @@ function startScene(i) {
   if (!sc) { showEnd(); return; }
   stopTalking();
   bookEl.classList.remove('title');
+  showAd(false);
   save.cur = i;
   save.max = Math.max(save.max, i);
   writeSave();
+  setProgress(i);   // 인트로 0% → 엔딩 장면 95% → 끝 화면 100%
   Object.assign(S, freshState(), { scene: i, sc, x: sc.startX });
   if (sc.setup) sc.setup();
   chapterEl.textContent = sc.chapter;
@@ -2150,6 +2199,8 @@ function showEnd() {
   save.max = SCENES.length - 1;
   save.done = true;
   writeSave();
+  setProgress(SCENES.length);
+  showAd(true);
   chapterEl.textContent = '';
   say(['- 끝 -'], () => {
     hint('처음 화면으로 ▶');
@@ -2161,6 +2212,15 @@ function showEnd() {
 // 메인 화면: 새로하기 · 이어하기 · 타임라인
 // ─────────────────────────────────────────────
 const bookEl = document.getElementById('book');
+
+// 광고는 메인 화면 · 끝 화면에서만 (1번 · 2번 자리). ?adpreview 면 자리 상자를 미리 보여 준다
+const adSlot = document.getElementById('adSlot');
+if (new URLSearchParams(location.search).has('adpreview') && !adSlot.children.length) {
+  adSlot.innerHTML = '<div class="ad-preview">광고 자리</div>';
+}
+function showAd(on) {
+  document.body.classList.toggle('show-ad', on);
+}
 const timelineEl = document.getElementById('timeline');
 
 function menuButton(label, onClick, disabled = false) {
@@ -2174,6 +2234,7 @@ function menuButton(label, onClick, disabled = false) {
 function showTitle() {
   stopTalking();
   bookEl.classList.add('title');
+  showAd(true);
   timelineEl.classList.remove('on');
   Object.assign(S, freshState(), {
     sc: { bg: 'title' }, bookDone: !!save.done,
