@@ -2281,6 +2281,7 @@ function playCredit(k) {
   S.actors[0].arrive = () => {                   // 다 같이 같은 거리를 걸어서 첫 사람 도착 = 다 도착
     S.actors.forEach((a) => { a.heart = a.hearts; });
     say(c.lines, () => {
+      hint('');                                  // 걸어 나가는 동안은 누를 게 없다
       S.actors.forEach((a) => { a.heart = false; a.target = a.x + W - 20; });
       S.actors[0].arrive = () => playCredit(k + 1);
     });
@@ -2440,7 +2441,8 @@ function update(t) {
 function drawActor(a, t) {
   if (a.kind === 'bus') { drawBus(a.x); return; }
   const frames = SPRITES[a.sprite][a.dir || 'right'];
-  const img = a.target != null ? frames.walk[Math.floor(a.step / (a.speed > 1 ? 5 : 10)) % 2] : frames.stand;
+  // step 은 처음 움직일 때 생긴다. 크레딧처럼 다른 사람이 도착하는 순간 새로 만든 사람은 아직 없다
+  const img = a.target != null ? frames.walk[Math.floor((a.step || 0) / (a.speed > 1 ? 5 : 10)) % 2] : frames.stand;
   const x = Math.round(a.x), y = a.feet - (img.height - 1);
   ctx.drawImage(img, x, y);
   if (a.hat) {   // 훈장님 갓 + 흰 수염
@@ -2602,10 +2604,10 @@ function draw(t, now) {
 
 let tick = 0;
 function loop(now) {
+  requestAnimationFrame(loop);   // 먼저 예약: 그리다 오류가 나도 화면이 멈추지 않게
   tick++;
   update(tick);
   draw(tick, now);
-  requestAnimationFrame(loop);
 }
 
 showTitle();
