@@ -45,7 +45,8 @@
   }
   #top { display: flex; justify-content: space-between; align-items: center; min-height: 22px; }
   #chapter { color: var(--muted); font-size: 14px; }
-  #home {
+  #topBtns { display: flex; gap: 6px; }
+  #home, #bgm {
     font: inherit;
     font-size: 13px;
     color: var(--muted);
@@ -211,8 +212,13 @@
 <main id="book">
   <div id="top">
     <span id="chapter"></span>
-    <button id="home" type="button">처음 화면</button>
+    <span id="topBtns">
+      <button id="bgm" type="button">소리 끄기</button>
+      <button id="home" type="button">처음 화면</button>
+    </span>
   </div>
+  <audio id="bgmAudio" src="mom_life_theme.ogg" loop preload="auto"></audio>
+  <audio id="bgmEnding" src="mom_ending_theme.ogg" loop preload="auto"></audio>
   <div id="progress" role="progressbar" aria-label="이야기 진행" aria-valuemin="0"><div id="progressFill"></div></div>
   <div id="stage">
     <canvas id="game" width="160" height="90"></canvas>
@@ -1321,6 +1327,7 @@ const SCENES = [
     choices: [
       { label: '하고싶어!', ok: true, lines: [
         { text: '소녀는 그동안 쌓아놓은 강한 체력을 믿고,\n달리기를 하기로 했대', on: () => {
+          sfx.gun();
           walkTo(RACE.finish + 4, null, 1.5);
           S.actors[0].target = RACE.finish - 24; S.actors[0].speed = 1.1;
           S.actors[1].target = RACE.finish - 14; S.actors[1].speed = 1.25;
@@ -1331,6 +1338,7 @@ const SCENES = [
         { text: '그래 내가 무슨 달리기야... 일이나 하자', on: () => walkTo(-24, null, 0.5) },
         '소녀는 달리기를 하고 싶었지만\n집으로 가서 농사일을 도왔대.',
         { text: '그치만...달리기를 했으면 일등을 했겠지...?', on: () => {
+          sfx.gun();
           S.actors[0].target = RACE.finish + 30; S.actors[0].speed = 1.2;
           S.actors[1].target = RACE.finish + 40; S.actors[1].speed = 1.3;
         } },
@@ -1659,6 +1667,7 @@ const SCENES = [
       { label: '참가한다', ok: true, lines: [
         '딸! 엄마가 상품 타올게!!',
         { text: '소녀는 자신있게 달리기 줄에 섰고 1등을 했대!', on: () => {
+          sfx.gun();
           walkTo(RACE.finish + 4, null, 1.5);
           S.actors[0].target = RACE.finish - 24; S.actors[0].speed = 1.1;
           S.actors[1].target = RACE.finish - 14; S.actors[1].speed = 1.25;
@@ -1671,6 +1680,7 @@ const SCENES = [
       { label: '에이..못하겠어', ok: false, lines: [
         { text: "'어렸을 때 1등한거지 지금은 못하지...'", on: () => walkTo(-24, null, 0.5) },
         { text: '그렇지만 소녀의 마음속에서는\n뛰고싶은 마음이 가득이었대', on: () => {
+          sfx.gun();
           S.actors[0].target = RACE.finish + 30; S.actors[0].speed = 1.2;
           S.actors[1].target = RACE.finish + 40; S.actors[1].speed = 1.3;
         } },
@@ -1856,7 +1866,7 @@ const SCENES = [
       { label: '공인중개사 자격증!', ok: true, lines: [
         '소년도 세탁소를 그만두고 다시 회사로 돌아갔어.',
         { text: '소녀는 외벌이하는 소년에게 고마워하면서\n아이들을 위해 열심히 공인중개사 공부를 했고', on: () => { S.study = true; } },
-        { text: '2년만에 합격을 했어!', on: () => { S.study = false; burst(60); } },
+        { text: '2년만에 합격을 했어!', on: () => { S.study = false; sfx.stamp(); burst(60); } },
       ] },
     ],
   },
@@ -1922,6 +1932,7 @@ const SCENES = [
   },
   {
     chapter: '엔딩',
+    bgm: 'ending',   // 여기서부터 크레딧까지 엔딩 곡
     bg: 'univ',
     actor: 'adult',
     startX: 20,
@@ -2043,6 +2054,7 @@ function nextLine() {
   typeTimer = setInterval(() => {
     i++;
     sayEl.textContent = text.slice(0, i);
+    if (i % 2 === 0 && /\S/.test(text[i - 1])) sfx.type();   // 두 글자마다 똑 (빈칸 · 줄바꿈은 조용히)
     if (i >= text.length) finishTyping();
   }, 45);
 }
@@ -2081,6 +2093,7 @@ let fading = false;
 function fadeTo(fn) {
   fading = true;
   hint('');
+  sfx.page();
   fadeEl.classList.add('on');
   setTimeout(() => {
     fn();
@@ -2142,6 +2155,7 @@ function startScene(i) {
   const sc = SCENES[i];
   if (!sc) { showEnd(); return; }
   stopTalking();
+  setBgm(sc.bgm || 'main');
   bookEl.classList.remove('title', 'credits');
   showAd(false);
   save.cur = i;
@@ -2187,6 +2201,7 @@ function showChoices() {
 }
 
 function pick(ch) {
+  if (ch.ok) sfx.shine();   // 맞는 답이면 반짝 (틀린 답은 조용히)
   const go = () => say(ch.lines, () => (ch.ok ? sceneClear() : badEnding()));
   if (ch.before) ch.before(go);
   else if (ch.walkTo != null) walkTo(ch.walkTo, () => { S.hidden = true; go(); });
@@ -2205,6 +2220,7 @@ function sceneClear() {
 // 화면을 까맣게 하지 않는다 — 지우개로 지우듯 그림·글씨가 번진다
 function badEnding() {
   hint('');
+  sfx.erase();
   S.eraseAt = performance.now();
   setTimeout(() => sayEl.classList.add('erased'), 300);
   const scene = S.scene;
@@ -2219,6 +2235,7 @@ function badEnding() {
 
 function showEnd() {
   stopTalking();
+  setBgm('ending');
   Object.assign(S, freshState(), { sc: { bg: 'intro' }, hidden: true, bookDone: true });   // 다 읽었으니 책이 채워져 있다
   save.cur = null;     // 다 읽었으면 이어하기는 없고, 타임라인은 전부 열린다
   save.max = SCENES.length - 1;
@@ -2262,10 +2279,11 @@ function placeCast(cast, hearts) {
 
 function startCredits() {
   stopTalking();
+  setBgm('ending');
   bookEl.classList.remove('title');
   bookEl.classList.add('credits');
   Object.assign(S, freshState(), { sc: { bg: 'credits' }, hidden: true });
-  chapterEl.textContent = '';
+  chapterEl.textContent = '엔딩 크레딧';   // 장면 이름 자리에 표시해서 이야기 장면과 구분
   playCredit(0);
 }
 
@@ -2313,6 +2331,7 @@ function menuButton(label, onClick, disabled = false) {
 
 function showTitle() {
   stopTalking();
+  setBgm('main');
   bookEl.classList.remove('credits');
   bookEl.classList.add('title');
   showAd(true);
@@ -2372,6 +2391,239 @@ document.getElementById('home').addEventListener('click', (ev) => {
   if (!fading) fadeTo(showTitle);
 });
 
+// 배경 음악: 브라우저가 자동 재생을 막아서, 처음 누르거나 스페이스를 칠 때 튼다. 끈 상태는 이 브라우저에 기억
+// '소리 끄기' 하나로 배경 음악 · 효과음을 같이 끈다
+const BGM_KEY = 'sunny-book-bgm-off';
+// 곡은 둘: 평소엔 main, 엔딩 장면 · 끝 화면 · 크레딧은 ending. 바뀔 때 1초 동안 겹쳐서 넘어간다
+const BGM_VOL = 0.5;
+const BGM_FADE_MS = 1000;
+const bgmTracks = { main: document.getElementById('bgmAudio'), ending: document.getElementById('bgmEnding') };
+const bgmBtn = document.getElementById('bgm');
+let bgmTrack = 'main';
+let bgmFadeTimer = null;
+let bgmOff = false;
+try { bgmOff = localStorage.getItem(BGM_KEY) === '1'; } catch (e) { /* 기억 못 해도 음악은 된다 */ }
+Object.values(bgmTracks).forEach((a) => { a.volume = 0; });
+function syncBgm() {
+  bgmBtn.textContent = bgmOff ? '소리 켜기' : '소리 끄기';
+  clearInterval(bgmFadeTimer);
+  Object.entries(bgmTracks).forEach(([name, a]) => {
+    if (bgmOff || name !== bgmTrack) { a.pause(); a.volume = 0; return; }
+    a.volume = BGM_VOL;
+    a.play().catch(() => { /* 아직 한 번도 안 눌렀으면 막힌다. 다음 입력 때 다시 */ });
+  });
+  if (bgmOff) sfx.rain(false);
+}
+function setBgm(name) {
+  if (name === bgmTrack) return;
+  bgmTrack = name;
+  if (bgmOff) return;
+  const to = bgmTracks[name];
+  const from = Object.values(bgmTracks).filter((a) => a !== to);
+  if (to.paused) {
+    to.currentTime = 0;   // 곡이 바뀌면 새 곡은 처음부터
+    to.play().catch(() => {});
+  }
+  clearInterval(bgmFadeTimer);
+  const step = BGM_VOL / (BGM_FADE_MS / 50);
+  bgmFadeTimer = setInterval(() => {
+    to.volume = Math.min(BGM_VOL, to.volume + step);
+    from.forEach((a) => { a.volume = Math.max(0, a.volume - step); if (a.volume === 0) a.pause(); });
+    if (to.volume >= BGM_VOL && from.every((a) => a.paused)) clearInterval(bgmFadeTimer);
+  }, 50);
+}
+function bgmFirstInput() {
+  sfx.unlock();
+  if (!bgmOff && bgmTracks[bgmTrack].paused) syncBgm();
+}
+document.addEventListener('pointerdown', bgmFirstInput);
+document.addEventListener('keydown', bgmFirstInput);
+bgmBtn.addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  bgmOff = !bgmOff;
+  try { localStorage.setItem(BGM_KEY, bgmOff ? '1' : '0'); } catch (e) { /* 위와 같음 */ }
+  syncBgm();
+});
+bgmBtn.textContent = bgmOff ? '소리 켜기' : '소리 끄기';
+
+// 효과음: 파일 없이 Web Audio 로 그 자리에서 만든다 (8비트 느낌)
+const sfx = (() => {
+  let ac = null, master = null, noiseBuf = null, rainNode = null;
+  const last = {};
+  function unlock() {
+    if (!ac) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      ac = new AC();
+      master = ac.createGain();
+      master.gain.value = 0.35;
+      master.connect(ac.destination);
+      noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (ac.state === 'suspended') ac.resume();
+  }
+  // 같은 소리가 너무 붙어서 나면 하나만 (burst 여러 번 · 흔들림 연달아)
+  const ready = (name, gapMs) => {
+    if (bgmOff || !ac || ac.state !== 'running') return false;
+    const now = performance.now();
+    if (last[name] && now - last[name] < gapMs) return false;
+    last[name] = now;
+    return true;
+  };
+  function tone(freq, dur, { type = 'square', vol = 0.3, to = null, at = 0 } = {}) {
+    const t0 = ac.currentTime + at;
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t0);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.connect(g).connect(master);
+    o.start(t0);
+    o.stop(t0 + dur + 0.02);
+  }
+  function noise(dur, { vol = 0.3, filter = 'lowpass', freq = 1000, to = null, at = 0 } = {}) {
+    const t0 = ac.currentTime + at;
+    const src = ac.createBufferSource();
+    const f = ac.createBiquadFilter();
+    const g = ac.createGain();
+    src.buffer = noiseBuf;
+    f.type = filter;
+    f.frequency.setValueAtTime(freq, t0);
+    if (to) f.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    src.connect(f).connect(g).connect(master);
+    src.start(t0);
+    src.stop(t0 + dur + 0.02);
+  }
+  return {
+    unlock,
+    type() { if (ready('type', 60)) tone(880 + Math.random() * 120, 0.03, { vol: 0.08 }); },
+    click() { if (ready('click', 50)) tone(660, 0.07, { vol: 0.15, to: 990 }); },
+    page() {   // 책장 넘기는 사락
+      if (!ready('page', 300)) return;
+      noise(0.28, { vol: 0.25, filter: 'bandpass', freq: 800, to: 3000 });
+      noise(0.18, { vol: 0.12, filter: 'highpass', freq: 3000, at: 0.12 });
+    },
+    fanfare() {   // 빰빠밤
+      if (!ready('fanfare', 500)) return;
+      [523, 659, 784].forEach((f, i) => tone(f, 0.12, { vol: 0.18, at: i * 0.09 }));
+      tone(1047, 0.35, { vol: 0.2, at: 0.27 });
+    },
+    thud() {   // 쿵
+      if (!ready('thud', 250)) return;
+      tone(140, 0.3, { type: 'sine', vol: 0.6, to: 40 });
+      noise(0.2, { vol: 0.3, freq: 300 });
+    },
+    erase() {   // 지우개 스슥 스슥
+      if (!ready('erase', 1000)) return;
+      [0, 0.25, 0.5].forEach((at) => noise(0.2, { vol: 0.18, filter: 'highpass', freq: 2500, at }));
+    },
+    bell() {   // 띵동띵동
+      if (!ready('bell', 1500)) return;
+      [[1319, 0], [1047, 0.3], [1319, 0.7], [1047, 1.0]].forEach(([f, at]) => tone(f, 0.5, { type: 'sine', vol: 0.25, at }));
+    },
+    shine() {   // 반짝
+      if (!ready('shine', 500)) return;
+      [1568, 2093, 2637].forEach((f, i) => tone(f, 0.15, { type: 'triangle', vol: 0.12, at: i * 0.06 }));
+    },
+    step() { if (ready('step', 80)) noise(0.04, { vol: 0.1, freq: 600 }); },
+    heart() {   // 뿅
+      if (!ready('heart', 800)) return;
+      tone(784, 0.1, { type: 'triangle', vol: 0.15, to: 1175 });
+      tone(1175, 0.12, { type: 'triangle', vol: 0.12, at: 0.1 });
+    },
+    sniff() {   // 훌쩍 (짧게 두 번 들이쉬기)
+      if (!ready('sniff', 1500)) return;
+      [0, 0.22].forEach((at) => noise(0.16, { vol: 0.2, filter: 'bandpass', freq: 1200, to: 2400, at }));
+    },
+    fire() {   // 타닥타닥 + 사이렌 삐용삐용
+      if (!ready('fire', 3000)) return;
+      for (let i = 0; i < 10; i++) noise(0.05, { vol: 0.25, filter: 'highpass', freq: 1500, at: Math.random() * 1.2 });
+      [0.3, 0.9, 1.5].forEach((at) => {
+        tone(700, 0.3, { type: 'triangle', vol: 0.12, to: 1000, at });
+        tone(1000, 0.3, { type: 'triangle', vol: 0.12, to: 700, at: at + 0.3 });
+      });
+    },
+    pour() {   // 쪼르륵 (물방울 여러 개)
+      if (!ready('pour', 1500)) return;
+      for (let i = 0; i < 9; i++) tone(500 + Math.random() * 500, 0.06, { type: 'sine', vol: 0.18, to: 1400 + Math.random() * 400, at: i * 0.09 });
+    },
+    gun() {   // 탕!
+      if (!ready('gun', 1000)) return;
+      noise(0.35, { vol: 0.6, freq: 4000, to: 200 });
+      tone(200, 0.15, { type: 'sine', vol: 0.4, to: 50 });
+    },
+    clink() {   // 우유병 달그락
+      if (!ready('clink', 300)) return;
+      [0, 0.07, 0.16].forEach((at) => tone(2000 + Math.random() * 800, 0.08, { type: 'sine', vol: 0.12, at }));
+    },
+    birds() {   // 새벽 짹짹
+      if (!ready('birds', 3000)) return;
+      [0, 0.15, 0.7, 0.85, 1.0].forEach((at) => tone(2500 + Math.random() * 500, 0.08, { type: 'sine', vol: 0.1, to: 3800, at }));
+    },
+    stamp() {   // 도장 쾅
+      if (!ready('stamp', 500)) return;
+      tone(220, 0.2, { type: 'square', vol: 0.25, to: 60 });
+      noise(0.12, { vol: 0.35, freq: 800 });
+    },
+    rain(on) {   // 빗소리는 켜져 있는 동안 계속
+      if (on && !rainNode && !bgmOff && ac && ac.state === 'running') {
+        const src = ac.createBufferSource();
+        const f = ac.createBiquadFilter();
+        const g = ac.createGain();
+        src.buffer = noiseBuf;
+        src.loop = true;
+        f.type = 'lowpass';
+        f.frequency.value = 1400;
+        g.gain.setValueAtTime(0.001, ac.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.12, ac.currentTime + 0.5);
+        src.connect(f).connect(g).connect(master);
+        src.start();
+        rainNode = { src, g };
+      } else if (!on && rainNode) {
+        const { src, g } = rainNode;
+        rainNode = null;
+        g.gain.setTargetAtTime(0.001, ac.currentTime, 0.15);
+        src.stop(ac.currentTime + 0.6);
+      }
+    },
+  };
+})();
+
+// 버튼은 전부 딸깍 (잡는 단계에서 들어서 stopPropagation 해도 난다)
+document.addEventListener('click', (ev) => {
+  if (ev.target.closest && ev.target.closest('button')) sfx.click();
+}, true);
+
+// 장면 코드가 켜는 신호(비 · 초인종 · 반짝 · 흔들림)를 매 프레임 보고 켜지는 순간에 소리
+const sfxPrev = { shake: 0, bell: false, shine: false, love: false, tear: false, fire: false, pour: 0, milkPile: 0, morning: false, carry: null, stepIdx: -1 };
+function watchSfx() {
+  if (S.shake > sfxPrev.shake) sfx.gun();
+  if (S.bell && !sfxPrev.bell) sfx.bell();
+  if (S.shine && !sfxPrev.shine) sfx.shine();
+  if (S.love && !sfxPrev.love) sfx.heart();
+  if (S.tear && !sfxPrev.tear) sfx.sniff();
+  if (S.fire && !sfxPrev.fire) sfx.fire();
+  if (S.pour > 0 && sfxPrev.pour === 0) sfx.pour();
+  if (S.milkPile > sfxPrev.milkPile) sfx.clink();
+  if (S.morning && !sfxPrev.morning) sfx.birds();
+  if (S.carry === 'cert' && sfxPrev.carry !== 'cert') sfx.stamp();
+  sfx.rain(!!S.rain);
+  // 발소리: 걷는 그림이 바뀔 때마다 (소녀, 소녀가 안 보이면 걷고 있는 등장인물)
+  const w = !S.hidden && S.target != null ? S : S.actors.find((a) => a.target != null);
+  const idx = w ? Math.floor((w.step || 0) / ((w.speed || 0.6) > 1 ? 5 : 10)) : -1;
+  if (w && idx !== sfxPrev.stepIdx) sfx.step();
+  Object.assign(sfxPrev, {
+    shake: S.shake, bell: S.bell, shine: S.shine, love: S.love, tear: S.tear, fire: S.fire,
+    pour: S.pour, milkPile: S.milkPile, morning: S.morning, carry: S.carry, stepIdx: idx,
+  });
+}
+
 // ─────────────────────────────────────────────
 // 6. 움직임 · 그리기
 // ─────────────────────────────────────────────
@@ -2400,6 +2652,7 @@ function girlSprite() {
 }
 
 function burst(n) {
+  sfx.fanfare();
   for (let i = 0; i < n; i++) {
     S.parts.push({ kind: 'confetti', x: Math.random() * W, y: -Math.random() * 30, vx: (Math.random() - 0.5) * 0.4, vy: 0.4 + Math.random() * 0.5, life: 200, color: CONFETTI[i % CONFETTI.length] });
   }
@@ -2607,6 +2860,7 @@ function loop(now) {
   requestAnimationFrame(loop);   // 먼저 예약: 그리다 오류가 나도 화면이 멈추지 않게
   tick++;
   update(tick);
+  watchSfx();
   draw(tick, now);
 }
 
