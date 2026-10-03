@@ -1195,8 +1195,31 @@ const BG = {
     drawGround('#ead2c2');
     drawPath(ERA.morning);
     drawOffices(true);
+    drawPixelText('THE END', 6);
   },
 };
+
+// 하늘에 쓰는 작은 픽셀 글씨 (크레딧 'THE END'). 필요한 글자만 있다. # = 칠하는 칸
+const PIXEL_FONT = {
+  T: ['###', '.#.', '.#.', '.#.', '.#.'],
+  H: ['#.#', '#.#', '###', '#.#', '#.#'],
+  E: ['###', '#..', '###', '#..', '###'],
+  N: ['#..#', '##.#', '#.##', '#..#', '#..#'],
+  D: ['##.', '#.#', '#.#', '#.#', '##.'],
+  ' ': ['..', '..', '..', '..', '..'],
+};
+// 가운데 정렬. 흰 그림자를 한 칸 아래 깔아서 구름 위에서도 읽힌다
+function drawPixelText(text, y) {
+  const glyphs = [...text].map((c) => PIXEL_FONT[c]);
+  const width = glyphs.reduce((sum, g) => sum + g[0].length + 1, -1);
+  [[1, '#ffffff'], [0, PALETTE.o]].forEach(([dy, color]) => {
+    let x = Math.round((W - width) / 2);
+    glyphs.forEach((g) => {
+      g.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === '#') rect(x + c, y + r + dy, 1, 1, color); }));
+      x += g[0].length + 1;
+    });
+  });
+}
 
 // 메인 화면 — 엔딩까지 본 적이 있으면 책이 다 채워져 있다
 BG.title = function (t) {
